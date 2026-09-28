@@ -309,18 +309,31 @@ function seasonText() {
   const w = S.ctx.weather;
   return `${SEASON_RU[S.ctx.season] || ''}${w && w.temp != null ? ` · ${w.temp}°C` : ''}`;
 }
+function demoFb() {
+  const likes = {};
+  S.favorites.forEach((id) => { likes[id] = true; });
+  return { likes, dislikes: {}, wardrobe: (S.wardrobe && S.wardrobe.items) || [] };
+}
 async function loadFeed(query) {
   try {
     const r = await Api.post('/api/recommendations', query ? { query } : { struct: {} });
     (r.items || []).forEach((p) => { RC[p.id] = p; });
     S.feed = { title: query ? `«${query}»` : 'Для тебя', items: r.items || [], total: r.total || 0 };
-  } catch (e) { S.feed = { title: 'Для тебя', items: [], total: 0 }; }
+  } catch (e) {
+    const items = query ? Demo.search(Demo.parse(query), S.profile, demoFb()) : Demo.rank(Demo.PRODUCTS, S.profile, demoFb());
+    items.forEach((p) => { RC[p.id] = p; });
+    S.feed = { title: query ? `«${query}» · демо` : 'Для тебя · демо', items, total: items.length };
+  }
 }
 async function loadOutfits() {
   try {
     const r = await Api.post('/api/outfits', { count: 3 });
     S.feedOutfits = r.outfits || [];
-  } catch (e) { S.feedOutfits = []; }
+  } catch (e) {
+    const ranked = Demo.rank(Demo.PRODUCTS, S.profile, demoFb());
+    ranked.forEach((p) => { RC[p.id] = p; });
+    S.feedOutfits = Demo.outfits(ranked, S.profile).map((o) => Object.assign({}, o, { items: o.items.map((id) => RC[id]).filter(Boolean), why: ['соответствует твоему стилю', 'подходит по цветам', 'укладывается в бюджет'] }));
+  }
 }
 /* Дополни гардероб: топ вещей из категорий-пробелов. */
 async function loadGaps() {
@@ -331,7 +344,11 @@ async function loadGaps() {
     const r = await Api.post('/api/recommendations', { struct: {}, limit: 24 });
     (r.items || []).forEach((p) => { RC[p.id] = p; });
     S.gapItems = (r.items || []).filter((p) => gaps.includes(p.cat)).slice(0, 4);
-  } catch (e) {}
+  } catch (e) {
+    const ranked = Demo.rank(Demo.PRODUCTS, S.profile, demoFb());
+    ranked.forEach((p) => { RC[p.id] = p; });
+    S.gapItems = ranked.filter((p) => gaps.includes(p.cat)).slice(0, 4);
+  }
 }
 
 /* ---------- HOME: чат + лента ---------- */
@@ -451,7 +468,31 @@ async function askAI(text) {
     } catch (e) { /* тихо: остаётся демо-подборка */ }
     fin(patch);
   } catch (e) {
-    fin({ text: 'Не получилось связаться с AI. Проверь соединение и попробуй ещё раз.', error: true });
+    /* Нет backend (статический хостинг): локальный демо-мозг + живьём с WB. */
+    try {
+      const b = Demo.brain(text, S.profile);
+      b.items.forEach((p) => { RC[p.id] = p; });
+      const demoPatch = { text: b.message, picks: b.ids.slice(0, 6), allPicks: b.ids, total: b.total };
+      if (/образ/i.test(text)) {
+        const ranked = Demo.rank(Demo.PRODUCTS, S.profile, demoFb());
+        const o = Demo.outfits(ranked, S.profile)[0];
+        if (o) { o.items = o.items.map((id) => RC[id]).filter(Boolean); RC['chatfit'] = o; demoPatch.outfit = o; }
+      }
+      /* На статике живьё с WB тоже работает (CORS открыт) — score считаем
+         локально тем же движком, метка Live сохраняется. */
+      try {
+        const raw = await WBClient.searchText(text, 30);
+        const fb = demoFb();
+        const scored = [];
+        raw.forEach((p) => { try { const r = Demo.score(p, S.profile, fb); scored.push(Object.assign({}, p, { aiScore: r.score, aiParts: r.parts })); } catch (se) {} });
+        scored.sort((a, b) => b.aiScore - a.aiScore);
+        scored.forEach((p) => { RC[p.id] = p; });
+        if (scored.length) demoPatch.live = scored.slice(0, 6).map((p) => p.id);
+      } catch (we) {}
+      fin(demoPatch);
+    } catch (de) {
+      fin({ text: 'Не получилось связаться с AI. Проверь соединение и попробуй ещё раз.', error: true });
+    }
   }
 }
 window.feedFromChat = function (mid) {
@@ -512,6 +553,20 @@ window.__loadProduct = async function (id) {
       Api.get('/api/products/' + id + '/reviews').catch(() => null)
     ]);
     const p = pr.product; RC[p.id] = p;
+    renderDemoProduct(p, rv, id);
+  } catch (e) {
+    const base = Demo.find(id);
+    if (base) {
+      const ranked = Demo.rank([Object.assign({}, base)], S.profile, demoFb())[0];
+      RC[id] = ranked;
+      renderDemoProduct(ranked, { data: { count: 800 + (id.charCodeAt(1) * 37) % 4000, reviews: Demo.REVIEWS[ranked.cat] || [] } }, id);
+      return;
+    }
+    const el = document.getElementById('pbody');
+    if (el) el.innerHTML = `<div class="empty"><h3>Не открылось</h3><p class="small">Проверь соединение.</p><button class="btn secondary" onclick="__loadProduct('${id}')">Повторить</button></div>`;
+  }
+};
+function renderDemoProduct(p, rv, id) {
     const fav = S.favorites.includes(p.id);
     const need = p.cat === 'shoes' ? S.profile.shoeSize : p.cat === 'bottom' ? S.profile.pantsSize : S.profile.topSize;
     const an = p.aiParts || {};
@@ -540,11 +595,7 @@ window.__loadProduct = async function (id) {
       <div class="cta"><button class="btn" onclick="market('${p.id}')">Открыть в магазине ${ic('upRight', 16)}</button>
       <button class="btn secondary" onclick="dislike('${p.id}')">Не моё</button></div>`;
     el.querySelectorAll('.size').forEach((b) => b.onclick = () => { el.querySelectorAll('.size').forEach((x) => x.classList.remove('on')); b.classList.add('on'); });
-  } catch (e) {
-    const el = document.getElementById('pbody');
-    if (el) el.innerHTML = `<div class="empty"><h3>Не открылось</h3><p class="small">Проверь соединение.</p><button class="btn secondary" onclick="__loadProduct('${id}')">Повторить</button></div>`;
-  }
-};
+}
 /* Живой товар WB: рендерим из кеша, отзывы не выдумываем. */
 function renderLiveProduct(p) {
   const el = document.getElementById('pbody');
@@ -580,11 +631,13 @@ window.market = function (id) {
 };
 window.fav = async function (id) {
   const i = S.favorites.indexOf(id);
-  try {
-    if (i >= 0) { await Api.post('/api/favorites', { action: 'remove', productId: id }); S.favorites.splice(i, 1); }
-    else { await Api.post('/api/favorites', { productId: id }); await Api.post('/api/feedback', { productId: id, kind: 'like' }); S.favorites.push(id); toast('Сохранено — учтём в подборках'); }
-  } catch (e) { toast('Нет соединения'); }
+  if (i >= 0) S.favorites.splice(i, 1);
+  else { S.favorites.push(id); toast('Сохранено — учтём в подборках'); }
   save(); render();
+  try {
+    if (i >= 0) await Api.post('/api/favorites', { action: 'remove', productId: id });
+    else { await Api.post('/api/favorites', { productId: id }); await Api.post('/api/feedback', { productId: id, kind: 'like' }); }
+  } catch (e) { /* локально уже сохранено */ }
 };
 window.dislike = async function (id) {
   try { await Api.post('/api/feedback', { productId: id, kind: 'dislike', reason: 'Не мой стиль' }); } catch (e) {}
@@ -637,7 +690,16 @@ async function loadWardrobe() {
   try {
     const r = await Api.get('/api/wardrobe');
     S.wardrobe = { items: r.items || [], insights: r.insights || null };
-  } catch (e) { S.wardrobe = { items: [], insights: null }; }
+  } catch (e) {
+    try {
+      const raw = localStorage.getItem('stylist_v3_w');
+      const items = raw ? JSON.parse(raw) : [];
+      S.wardrobe = { items, insights: Demo.insights(items) };
+    } catch (de) { S.wardrobe = { items: [], insights: null }; }
+  }
+}
+function saveWardrobeLocal() {
+  try { localStorage.setItem('stylist_v3_w', JSON.stringify(S.wardrobe.items)); } catch (e) {}
 }
 function dot(c) { return `<span class="cdot" style="background:${CDOT[c] || '#ccc'}"></span>`; }
 function vWardrobe() {
@@ -692,18 +754,29 @@ window.wPhoto = function (e) {
 window.wAdd = async function () {
   const title = (WF.title || '').trim();
   if (!title) { toast('Сначала назови вещь'); return; }
+  const item = { id: 'w' + Date.now(), title, cat: WF.cat, colors: WF.colors.slice(), styles: WF.styles.slice(), photo: WF.photo, addedAt: Date.now() };
   try {
     const r = await Api.post('/api/wardrobe', { item: { title, cat: WF.cat, colors: WF.colors, styles: WF.styles, photo: WF.photo } });
     WF = { title: '', cat: 'top', colors: [], styles: [], photo: null };
     S.wardrobe = { items: [r.item].concat(S.wardrobe.items), insights: r.insights };
-    S._fed = false; S.gapItems = [];
-    save(); render();
-    toast('Добавлено — вкус обновлён');
-  } catch (e) { toast(e.message || 'Не получилось сохранить'); }
+  } catch (e) {
+    WF = { title: '', cat: 'top', colors: [], styles: [], photo: null };
+    S.wardrobe.items.unshift(item);
+    S.wardrobe.insights = Demo.insights(S.wardrobe.items);
+    saveWardrobeLocal();
+  }
+  S._fed = false; S.gapItems = [];
+  save(); render();
+  toast('Добавлено — вкус обновлён');
 };
 window.wDel = async function (id) {
-  try { const r = await Api.req('/api/wardrobe', { method: 'DELETE', body: JSON.stringify({ id }) }); S.wardrobe.items = S.wardrobe.items.filter((x) => x.id !== id); S.wardrobe.insights = r.insights; S._fed = false; S.gapItems = []; save(); render(); }
-  catch (e) { toast('Нет соединения'); }
+  S.wardrobe.items = S.wardrobe.items.filter((x) => x.id !== id);
+  S.wardrobe.insights = Demo.insights(S.wardrobe.items);
+  saveWardrobeLocal(); S._fed = false; S.gapItems = []; save(); render();
+  try {
+    const r = await Api.req('/api/wardrobe', { method: 'DELETE', body: JSON.stringify({ id }) });
+    S.wardrobe.insights = r.insights || S.wardrobe.insights; render();
+  } catch (e) { /* локально уже удалено */ }
 };
 
 /* ---------- favorites / profile ---------- */
@@ -713,6 +786,14 @@ function vFav() {
 }
 window.__loadFav = async function () {
   const el = document.getElementById('favgrid'); if (!el) return;
+  const showEmpty = () => { el.innerHTML = `<div class="empty"><h3>Пока пусто</h3><p class="small">Нажимай на сердечко — будем подбирать точнее.</p><button class="btn secondary" onclick="go('home')">К подборке</button></div>`; };
+  if (!Api.ok) {
+    if (!S.favorites.length) { showEmpty(); return; }
+    const items = S.favorites.map((id) => RC[id] || Demo.rank([Demo.find(id)].filter(Boolean), S.profile, demoFb())[0]).filter(Boolean);
+    items.forEach((p) => { RC[p.id] = p; });
+    el.innerHTML = `<div class="feed">${items.map((x, i) => cardHtml(x, i)).join('')}</div>`;
+    return;
+  }
   try {
     const r = await Api.get('/api/favorites');
     S.favorites = r.favorites || S.favorites; save();
