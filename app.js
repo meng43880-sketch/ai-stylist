@@ -624,12 +624,22 @@ function renderLiveProduct(p) {
     <div style="height:150px"></div>
     <div class="cta"><button class="btn" onclick="market('${p.id}')">Купить на Wildberries ${ic('upRight', 16)}</button></div>`;
 }
-window.market = function (id) {
+window.market = async function (id) {
   const p = RC[id]; if (!p) return;
-  if (p.live && p.url) { window.open(p.url, '_blank'); toast('Открываем реальную карточку'); return; }
-  const q = encodeURIComponent(p.title);
-  window.open(p.mp === 'WB' ? `https://www.wildberries.ru/catalog/0/search.aspx?search=${q}` : `https://www.ozon.ru/search/?text=${q}`, '_blank');
-  toast('Открываем поиск в магазине');
+  let raw;
+  if (p.live && p.url) raw = p.url;
+  else {
+    const q = encodeURIComponent(p.title);
+    raw = p.mp === 'WB' ? `https://www.wildberries.ru/catalog/0/search.aspx?search=${q}` : `https://www.ozon.ru/search/?text=${q}`;
+  }
+  try {
+    const r = await Api.get('/api/market/link?mp=' + p.mp + '&u=' + encodeURIComponent(raw));
+    window.open(r.data.url, '_blank');
+    toast(r.data.affiliate ? 'Открываем магазин (партнёрская ссылка)' : (p.live ? 'Открываем реальную карточку' : 'Открываем поиск в магазине'));
+  } catch (e) {
+    window.open(raw, '_blank');
+    toast(p.live ? 'Открываем реальную карточку' : 'Открываем поиск в магазине');
+  }
 };
 window.fav = async function (id) {
   const i = S.favorites.indexOf(id);

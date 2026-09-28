@@ -174,6 +174,17 @@ function toModel(p) {
 }
 function normTitle(t) { return String(t || '').toLowerCase().replace(/[^a-zа-я0-9]+/gi, ' ').trim(); }
 
+/* ---------- Партнёрские ссылки (монетизация + легитимная связь с WB) ----------
+   Формат: AFFILIATE_WB_PREFIX=https://cpa-сеть/deeplink?ulp= (префикс + encodeURIComponent(url)).
+   Без префиксов возвращаем чистый URL. Теги — только в env, не в коде. */
+function affLink(mp, url) {
+  try {
+    const pre = mp === 'WB' ? (process.env.AFFILIATE_WB_PREFIX || '') : (process.env.AFFILIATE_OZON_PREFIX || '');
+    if (!pre) return { url, affiliate: false };
+    return { url: pre + encodeURIComponent(url), affiliate: true };
+  } catch (e) { return { url, affiliate: false }; }
+}
+
 /* ---------- CatalogProvider: источник сырых данных ---------- */
 class CatalogProvider {
   constructor(name) { this.catalogName = name; }
@@ -312,4 +323,4 @@ class MarketplaceService {
   }
 }
 
-module.exports = { wbSearchServer, funnelSearch, dedupeLive, ozonSearchServer, normalizeWbItem, scoreLive, structToQuery, structToQueries, wbPhoto, wbUrl, toModel, CatalogProvider, DemoCatalogProvider, WbPublicCatalogProvider, OzonCatalogProvider, MarketplaceProvider, WildberriesProvider, OzonProvider, DemoMarketplaceProvider, MarketplaceService };
+module.exports = { wbSearchServer, funnelSearch, dedupeLive, ozonSearchServer, normalizeWbItem, scoreLive, structToQuery, structToQueries, wbPhoto, wbUrl, affLink, toModel, CatalogProvider, DemoCatalogProvider, WbPublicCatalogProvider, OzonCatalogProvider, MarketplaceProvider, WildberriesProvider, OzonProvider, DemoMarketplaceProvider, MarketplaceService };

@@ -199,6 +199,13 @@ async function route(req, res) {
       const scored = M.scoreLive(items, O.scoreCtx(profile(), feedback(), { occasion: struct.occasion }));
       return send(res, 200, { ok: true, items: scored });
     }
+    /* Партнёрская обёртка ссылки: frontend зовёт перед открытием магазина. */
+    if (m === 'GET' && p === '/api/market/link') {
+      const u = String(url.searchParams.get('u') || '').slice(0, 500);
+      const mp = url.searchParams.get('mp') === 'OZON' ? 'OZON' : 'WB';
+      if (!/^https:\/\/(www\.)?(wildberries\.ru|ozon\.ru)\//.test(u)) return send(res, 400, { ok: false, error: 'Только ссылки WB/Ozon' });
+      return send(res, 200, { ok: true, data: M.affLink(mp, u) });
+    }
     /* --- wardrobe: вещи пользователя + AI-оценка вкуса --- */
     if (m === 'GET' && p === '/api/wardrobe') {
       db.wardrobe = db.wardrobe || [];
