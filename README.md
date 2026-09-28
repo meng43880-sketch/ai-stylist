@@ -1,0 +1,149 @@
+# Твой AI-стилист — персональный подбор одежды
+
+> Frontend v3 (минимализм): главная = встроенный AI-чат + лента. Ответы AI со
+> вещами/образами одной кнопкой уходят в ленту. Каталог и скоринг — backend.
+
+Mobile-first AI-стилист: фото → анализ → профиль → персональная лента → образы → магазин.
+Без ключей работает **демо-режим** (DemoAI + демо-каталог). С ключами в backend `.env` —
+**production AI-режим** (Qwen Vision / Stylist / Product). Ключи во frontend отсутствуют.
+
+## Структура
+
+```text
+/ (project root = frontend)
+  index.html, styles.css, app.js   # frontend, чистый HTML/CSS/JS
+  .env.example, README.md
+/backend
+  package.json, server.js          # HTTP API, zero dependencies, Node 18+
+  /lib  config, store, qwen, catalog, recommend, orchestrator
+  /data db.json                    # создаётся сам (профили, кеш, история)
+```
+
+## Запуск frontend
+
+Вариант A (рекомендуется) — через backend, тогда доступен `/api`:
+
+```bash
+cd backend
+npm start
+# → http://127.0.0.1:8001
+```
+
+Вариант B — любой статический сервер из корня (демо-режим, без AI API):
+
+```bash
+python -m http.server 8000
+# → http://127.0.0.1:8000
+```
+
+## Запуск backend
+
+```bash
+cd backend
+cp ../.env.example ../.env   # или .env рядом с backend — см. ниже
+npm start
+```
+
+Backend читает env из процесса. Проще всего держать `.env` в корне проекта и
+стартовать так (PowerShell): `Get-Content ..\.env | ...` — либо скопировать `.env`
+в `backend/.env` и использовать `node --env-file=.env server.js` (Node 20.6+).
+Без `.env` используются дефолты: порт 8001, `DATA_SOURCE=demo`, демо-режим AI.
+
+## Environment variables
+
+| Переменная | Назначение |
+|---|---|
+| `QWEN_VISION_API_KEY/BASE_URL/MODEL` | Vision AI (анализ фото; по умолчанию `qwen3-vl-plus`) |
+| `QWEN_STYLIST_API_KEY/BASE_URL/MODEL` | Main Stylist AI (диалог, решения; по умолчанию `qwen3-32b`) |
+| `QWEN_PRODUCT_API_KEY/BASE_URL/MODEL` | Product AI (разбор товаров/отзывов; по умолчанию `qwen3-8b`) |
+| `DATA_SOURCE` | `demo` (демо-каталог) / `production` (реальные провайдеры) |
+| `WILDBERRIES_API_KEY`, `OZON_API_KEY` | Будущие backend-proxy маркетплейсов |
+| `WEATHER_LAT/LON/CITY` | Погода (Open-Meteo, ключ не нужен) |
+| `SCORE_WEIGHTS` | JSON весов 8-факторного скоринга |
+| `PORT`, `MAX_BODY_BYTES`, `MAX_IMAGE_BYTES`, `RATE_PER_MIN` | Лимиты и порт |
+
+## Подключение Qwen
+
+1. Вставь ключи в `.env` (только backend, никогда во frontend).
+2. При необходимости смени `*_BASE_URL`/`*_MODEL` — модель задаётся только env.
+3. Перезапусти backend. `GET /api/status` покажет `aiMode: production` и какие
+   провайдеры сконфигурированы. Без ключей — `demo`, приложение не падает.
+
+Ожидаемые модели: Vision — Qwen3-VL-совместимая (`qwen3-vl-plus`);
+Stylist — Qwen3-32B-совместимая (`qwen3-32b`); Product — лёгкая (`qwen3-8b`).
+Все через OpenAI-совместимый `/chat/completions` + `response_format: json_object`.
+
+## Подключение Wildberries / Ozon
+
+**Wildberries — подключён по-настоящему** (без ключа, открытый поисковый API):
+
+- `backend/lib/market.js` — `wbSearchServer()` ходит в `search.wb.ru`, маппит
+  ответ в нашу схему товара (реальные название, цена, фото, рейтинг, цвета,
+  размеры, ссылка на карточку). Живые товары помечены `live:true`
+- `GET /api/market/wb/search?q=&limit=` — серверный поиск (с кешем 10 минут)
+- `POST /api/market/score` — скоринг живых товаров тем же движком (профиль + вкус + гардероб)
+- Frontend `WBClient` дублирует поиск **прямо из браузера пользователя** (у WB
+  открытый CORS) — работает, даже если сеть сервера режет WB
+- `DATA_SOURCE=hybrid` — backend сам подмешивает живьё в `/api/recommendations`
+- Живое помечается в UI зелёной меткой Live; отзывам живых товаров мы не
+  выдумываем — они смотрятся на странице магазина
+
+**Ozon — честное ограничение.** Открытого товарного API нет, витрина за
+антиботом (403). `GET /api/market/ozon/search` возвращает `503 NO_SOURCE`.
+Для живых данных Ozon нужен официальный доступ:
+
+1. Ozon Seller API (нужен кабинет продавца) — остатки/цены своих товаров
+2. Ozon Partner (CPA-платформа, модерация) — товарные фиды и deeplink
+
+Куда вставлять: `WILDBERRIES_API_KEY` не нужен; для Ozon — будущие
+`OZON_CLIENT_ID / OZON_API_KEY` в `.env`, реализация — в `market.js`
+`ozonSearchServer()` (интерфейс уже на месте). Кнопки «перейти в магазин»
+уже ведут на живой поиск Ozon.
+
+## Demo mode / Production mode
+
+- Нет ключей → `aiMode: demo`: локальный DemoAI, детерминированный скоринг,
+  демо-каталог и демо-отзывы. Всё работает офлайн (кроме фото из сети).
+- Есть ключи → `aiMode: production`: фото уходит в Vision AI (уменьшенное до
+  768px), чат ведёт Stylist AI с tools, товары разбирает Product AI с кешем
+  (повторный анализ одного товара не вызывается). При ошибке AI — graceful
+  fallback на демо с сообщением, приложение не падает.
+- Dev-индикатор режима: открой приложение с `?dev=1`.
+
+## Архитектура
+
+```text
+Frontend → /api/* → AIOrchestrator → Vision | Stylist | Product (Qwen)
+                          ↓
+              Recommendation Engine (8 факторов, код, а не AI)
+  style .25 · color .15 · body .15 · size .15 · budget .10 · pref .10 · quality .05 · season .05
+```
+
+Cost control: 500 товаров → код-фильтры → кешированные анализы → скоринг →
+топ-20 → Main AI только для финала/диалога. Фото анализируется один раз и
+кешируется по хешу. Код считает: фильтры, сортировку, дедуп, score, историю,
+кеш, пагинацию.
+
+## Как заменить AI provider
+
+Реализуй тот же интерфейс, что в `backend/lib/qwen.js`
+(`chatJSON(provider, {system, user, images, required})`), положи рядом
+`myprovider.js`, укажи его BASE_URL/MODEL в `.env`. Frontend не меняется.
+
+## Как заменить Product provider
+
+Реализуй `search(struct)/getById(id)` в `backend/lib/catalog.js`,
+зарегистрируй в оркестраторе, поставь `DATA_SOURCE=production`. Frontend не меняется.
+
+## Как перейти на собственный GPU
+
+Self-hosted Qwen с OpenAI-совместимым сервером (vLLM/TGI): достаточно сменить
+`*_BASE_URL` на адрес GPU и `*_MODEL` на локальную модель. Никаких изменений кода.
+
+## API (кратко)
+
+`GET /api/status|/api/context` · `GET/PUT/DELETE /api/profile` ·
+`POST /api/analyze-photo` · `POST /api/search|/api/recommendations` ·
+`POST /api/outfits` · `GET /api/products/:id|/:id/reviews|/:id/analysis` ·
+`POST /api/product-analysis` · `POST /api/ai/chat` · `POST /api/feedback` ·
+`GET/POST /api/favorites` · `GET /api/history`
