@@ -46,19 +46,22 @@ npm start
 
 ## Деплой в интернет (полная версия с backend)
 
-Бесплатно, без карты — **Koyeb** (или Render, шаги те же):
+Бесплатно, без карты — **Render** (в репо уже лежит `render.yaml` + `Dockerfile`):
 
-1. Зайди на koyeb.com через GitHub
-2. Create App → Import from GitHub → выбери `ai-stylist`
-3. Builder: **Dockerfile** (найдётся сам), порт `8001`
-4. В Environment variables добавь:
-   `ZVENO_API_KEY`, `ZVENO_MODEL`, `QWEN_STYLIST_MODEL`,
-   `QWEN_PRODUCT_MODEL`, `QWEN_VISION_MODEL`, `DATA_SOURCE=demo`
-5. Deploy → получишь публичный URL вида `xxx.koyeb.app`
+1. Зайди на **dashboard.render.com** через GitHub
+2. **New → Web Service** → выбери `ai-stylist`
+3. Runtime: **Docker** (подхватится сам), план **Free**
+4. В **Environment** Render попросит только секрет (остальное уже в `render.yaml`):
+   `ZVENO_API_KEY` = твой ключ
+5. **Deploy** → через несколько минут получишь URL вида `https://xxx.onrender.com`
 
-Нюансы: диск эфемерный (профили/гардероб сбросятся при редеплое — для теста ок);
-на бесплатном тарифе может быть пауза при простое (первый запрос разбудит).
-Локальный backend при этом можно остановить.
+Нюансы: на Free-тарифе сервис засыпает после ~15 минут простоя — первый
+запрос будит его ~30–60 секунд (потом летает). Диск эфемерный: профили
+и гардероб сбросятся при редеплое — для теста ок. Локальный backend при
+этом можно остановить.
+
+Запасной вариант — **Glitch** (тоже бесплатно, импорт из GitHub, засыпает
+через 5 минут простоя).
 
 Backend читает env из процесса. Проще всего держать `.env` в корне проекта и
 стартовать так (PowerShell): `Get-Content ..\.env | ...` — либо скопировать `.env`

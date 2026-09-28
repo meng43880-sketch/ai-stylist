@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: ai-stylist
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /api/status
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATA_SOURCE
+        value: demo
+      - key: ZVENO_BASE_URL
+        value: https://api.zveno.ai/v1
+      - key: ZVENO_MODEL
+        value: dots-studio/dots-3-note-preview:free
+      - key: QWEN_STYLIST_MODEL
+        value: mistralai/mistral-nemo
+      - key: QWEN_PRODUCT_MODEL
+        value: mistralai/mistral-nemo
+      - key: QWEN_VISION_MODEL
+        value: google/gemma-4-31b-it:free
+      - key: ZVENO_API_KEY
+        sync: false
