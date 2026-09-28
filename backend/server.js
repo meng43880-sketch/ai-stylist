@@ -236,6 +236,7 @@ async function route(req, res) {
     return send(res, e.status || 500, { ok: false, code: e.code || 'ERROR', error: userError(e), demoFallback: true });
   }
 }
-http.createServer(route).listen(CFG.port, '127.0.0.1', () => {
-  console.log(`AI-Stylist backend on http://127.0.0.1:${CFG.port}  aiMode=${CFG.aiMode} data=${CFG.dataSource} season=${R.currentSeason()}`);
+const HOST = process.env.HOST || '0.0.0.0';
+http.createServer(route).listen(CFG.port, HOST, () => {
+  console.log(`AI-Stylist backend on http://${HOST}:${CFG.port}  aiMode=${CFG.aiMode} data=${CFG.dataSource} season=${R.currentSeason()}`);
 });

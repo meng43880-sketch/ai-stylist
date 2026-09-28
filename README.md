@@ -44,6 +44,22 @@ cp ../.env.example ../.env   # или .env рядом с backend — см. ни�
 npm start
 ```
 
+## Деплой в интернет (полная версия с backend)
+
+Бесплатно, без карты — **Koyeb** (или Render, шаги те же):
+
+1. Зайди на koyeb.com через GitHub
+2. Create App → Import from GitHub → выбери `ai-stylist`
+3. Builder: **Dockerfile** (найдётся сам), порт `8001`
+4. В Environment variables добавь:
+   `ZVENO_API_KEY`, `ZVENO_MODEL`, `QWEN_STYLIST_MODEL`,
+   `QWEN_PRODUCT_MODEL`, `QWEN_VISION_MODEL`, `DATA_SOURCE=demo`
+5. Deploy → получишь публичный URL вида `xxx.koyeb.app`
+
+Нюансы: диск эфемерный (профили/гардероб сбросятся при редеплое — для теста ок);
+на бесплатном тарифе может быть пауза при простое (первый запрос разбудит).
+Локальный backend при этом можно остановить.
+
 Backend читает env из процесса. Проще всего держать `.env` в корне проекта и
 стартовать так (PowerShell): `Get-Content ..\.env | ...` — либо скопировать `.env`
 в `backend/.env` и использовать `node --env-file=.env server.js` (Node 20.6+).
