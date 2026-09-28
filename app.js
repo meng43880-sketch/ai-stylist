@@ -439,7 +439,7 @@ async function askAI(text) {
   const fin = (patch) => {
     S.chat = S.chat.map((m) => m.id === mid ? Object.assign(m, patch, { loading: false }) : m);
     if (patch.outfit) RC['chatfit'] = patch.outfit;
-    S.lastResult = { query: text, message: patch.text || '', picks: patch.allPicks || patch.picks || [], live: patch.live || [], outfit: patch.outfit || null, total: patch.total || 0, ok: !patch.error };
+    S.lastResult = { query: text, message: patch.text || '', picks: patch.allPicks || patch.picks || [], live: patch.live || [], liveBlocked: !!patch.liveBlocked, outfit: patch.outfit || null, total: patch.total || 0, ok: !patch.error };
     S.resMp = 'all';
     save(); __asking = false;
     go('results');
@@ -464,8 +464,8 @@ async function askAI(text) {
         const s = await Api.post('/api/market/score', { items: raw, struct: {} });
         (s.items || []).forEach((p) => { RC[p.id] = p; });
         patch.live = (s.items || []).slice(0, 6).map((p) => p.id);
-      }
-    } catch (e) { /* тихо: остаётся демо-подборка */ }
+      } else patch.liveBlocked = true;
+    } catch (e) { patch.liveBlocked = true; }
     fin(patch);
   } catch (e) {
     /* Нет backend (статический хостинг): локальный демо-мозг + живьём с WB. */
@@ -488,7 +488,8 @@ async function askAI(text) {
         scored.sort((a, b) => b.aiScore - a.aiScore);
         scored.forEach((p) => { RC[p.id] = p; });
         if (scored.length) demoPatch.live = scored.slice(0, 6).map((p) => p.id);
-      } catch (we) {}
+        else demoPatch.liveBlocked = true;
+      } catch (we) { demoPatch.liveBlocked = true; }
       fin(demoPatch);
     } catch (de) {
       fin({ text: 'Не получилось связаться с AI. Проверь соединение и попробуй ещё раз.', error: true });
@@ -523,7 +524,8 @@ function vResults() {
     <div class="chips" style="margin-top:12px">${[['all', 'Все'], ['wb', 'WB · живьём'], ['demo', 'Демо-каталог']].map(([v, t]) => `<button class="chip ${(S.resMp || 'all') === v ? 'on' : ''}" onclick="resMp('${v}')">${t}</button>`).join('')}</div>
     ${r.outfit ? `<div class="sect"><h2>Готовый образ</h2></div>${outfitCard(r.outfit)}` : ''}
     ${live.length ? `<div class="sect"><h2>Живьём · WB</h2><span>реальные цены</span></div>
-    <div class="feed">${live.map((x, i) => cardHtml(x, i)).join('')}</div>` : ''}
+    <div class="feed">${live.map((x, i) => cardHtml(x, i)).join('')}</div>`
+    : (r.liveBlocked ? `<div class="note">Живьём с WB не получилось — сеть режет запросы к маркетплейсу. Ниже демо-подборка, она считается честно тем же движком.</div>` : '')}
     ${items.length ? `<div class="sect"><h2>Лучшее для тебя</h2>${r.total ? `<span>${r.total}</span>` : ''}</div>
     <div class="feed">${items.map((x, i) => cardHtml(x, i)).join('')}</div>` : ''}
     ${!items.length && !live.length && !r.outfit && r.ok ? `<div class="empty"><h3>Ничего не нашлось</h3><p class="small">Попробуй переформулировать запрос.</p></div>` : ''}
