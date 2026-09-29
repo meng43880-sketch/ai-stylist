@@ -57,6 +57,8 @@ const CFG = {
   port: num(process.env.PORT, 8001),
   nodeEnv: process.env.NODE_ENV || 'development',
   demoMode: (process.env.DEMO_MODE || '').toLowerCase() !== 'false' && !(process.env.QWEN_VISION_API_KEY || process.env.QWEN_STYLIST_API_KEY || process.env.QWEN_PRODUCT_API_KEY || process.env.OFOX_API_KEY || process.env.ZVENO_API_KEY),
+  /* Демо-каталог выключен: никаких выдуманных товаров. Включить обратно: DEMO_CATALOG=true */
+  demoCatalog: (process.env.DEMO_CATALOG || '').toLowerCase() === 'true',
   dataSource: (process.env.DATA_SOURCE || 'demo').toLowerCase(), // demo | hybrid
   weights: weights(),
   limits: { bodyBytes: num(process.env.MAX_BODY_BYTES, 1500000), imageBytes: num(process.env.MAX_IMAGE_BYTES, 4000000), ratePerMin: num(process.env.RATE_PER_MIN, 60) },

@@ -190,8 +190,8 @@ function scoreCtx(profile, feedback, extra) {
    скоринг → топ-30 → AI#3 только по новичкам без кеша (макс. 8) → топ-20.
    AI никогда не видит сотни товаров. */
 async function searchPipeline({ struct, text, profile, feedback, limit }) {
-  // 500 товаров → код-фильтры → ~150 → кешированные анализы → скоринг → топ-20
-  let list = activeCatalog(struct);
+  // Демо-каталог выключен по умолчанию: только живьё + пустота, без выдумок.
+  let list = CFG.demoCatalog ? activeCatalog(struct) : [];
   const total = list.length;
   list = list.slice(0, 500);
   const top = R.rankProducts(list, scoreCtx(profile, feedback, { occasion: struct && struct.occasion }));
@@ -257,8 +257,7 @@ async function chat({ message, conversationId, profile, feedback }) {
   if (!msg.trim()) throw Q.err('BAD_REQUEST', 'Пустое сообщение', 400);
   const cid = conversationId || ('c' + Date.now());
   db.chats[cid] = db.chats[cid] || [];
-  db.chats[cid].push({ role: 'user', text: msg, t: Date.now() });
-  const weather = await getWeather();
+  db.chats[cid].push({ role: 'user', text: msg, t: Date.now() });  const weather = await getWeather();
   const ctx = { weather, season: R.currentSeason(), wardrobe: db.wardrobe || [] };
   let out;
   if (!Q.isConfigured(CFG.qwen.stylist)) {
@@ -289,6 +288,7 @@ async function chat({ message, conversationId, profile, feedback }) {
       out = Object.assign({}, d, { message: prefix + d.message, products: pipe.items, total: pipe.total, conversationId: cid, aiMode: 'demo-fallback' });
     }
   }
+  if (!out.products.length) out.message += '\n\nЖивые товары WB сейчас недоступны с этой сети, а выдуманных мы не показываем. Попробуй с другого интернета.';
   db.chats[cid].push({ role: 'ai', text: out.message, t: Date.now() });
   db.chats[cid] = db.chats[cid].slice(-30);
   save();
