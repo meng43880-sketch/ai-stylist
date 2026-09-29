@@ -41,7 +41,7 @@ function readBody(req) {
   });
 }
 function userError(e) {
-  const map = { TIMEOUT: 'AI долго отвечает. Показываем сохранённые рекомендации.', RATE_LIMIT: 'Слишком много запросов. Подожди минуту.', AUTH: e.message, AUTH_REQUIRED: 'Войди или зарегистрируйся — сессия истекла.', NO_FUNDS: e.message, UNAVAILABLE: 'Не удалось обновить AI-рекомендации. Показываем сохранённые рекомендации.', NO_SOURCE: e.message, NOT_FOUND: 'Не найдено', BAD_REQUEST: e.message, TOO_LARGE: e.message, BAD_IMAGE: e.message };
+  const map = { TIMEOUT: 'AI долго отвечает. Показываем сохранённые рекомендации.', RATE_LIMIT: 'Слишком много запросов. Подожди минуту.', AUTH: e.message, AUTH_REQUIRED: 'Войди или зарегистрируйся — сессия истекла.', NO_FUNDS: e.message, NO_VISION: e.message, UNAVAILABLE: 'Не удалось обновить AI-рекомендации. Показываем сохранённые рекомендации.', NO_SOURCE: e.message, NOT_FOUND: 'Не найдено', BAD_REQUEST: e.message, TOO_LARGE: e.message, BAD_IMAGE: e.message };
   return map[e.code] || 'Что-то пошло не так. Попробуй ещё раз.';
 }
 const DEFAULT_PROFILE = { name: 'Артём', height: 190, weight: 85, gender: 'male', topSize: 'L', pantsSize: '32', shoeSize: '43', build: 'athletic', styles: ['smart', 'minimal'], budget: 5000, colors: ['black', 'white', 'olive', 'beige'], categories: ['top', 'bottom', 'shoes'] };
@@ -182,7 +182,7 @@ async function route(req, res) {
     /* --- chat --- */
     if (m === 'POST' && p === '/api/ai/chat') {
       const b = await readBody(req);
-      const out = await O.chat({ message: b.message, conversationId: b.conversationId, profile: profile(U), feedback: feedback(U), uid, wardrobe: U.wardrobe });
+      const out = await O.chat({ message: b.message, conversationId: b.conversationId, profile: profile(U), feedback: feedback(U), uid, wardrobe: U.wardrobe, image: b.image || null });
       return send(res, 200, { ok: true, data: out });
     }
     /* --- feedback / favorites / history --- */

@@ -236,6 +236,33 @@ async function getWeather() {
     return out;
   } catch { return { city: CFG.weather.city, temp: null, source: 'unavailable' }; }
 }
+/* ---------- VISION для вещи с фото: описываем → ищем похожие ---------- */
+function shaShort(s) { return crypto.createHash('sha256').update(String(s)).digest('hex').slice(0, 32); }
+async function describeItem(image) {
+  const key = shaShort(String(image).slice(0, 50000));
+  const hit = getCache('vision_items', key, 30 * 24 * 3600 * 1000);
+  if (hit) return Object.assign({ cached: true }, hit);
+  if (!Q.isConfigured(CFG.qwen.vision)) {
+    const e = new Error('Анализ фото недоступен: подключи vision-модель.');
+    e.code = 'NO_VISION'; e.status = 503; throw e;
+  }
+  const obj = await Q.chatJSON(CFG.qwen.vision, {
+    system: 'You see ONE clothing item. Return STRICT JSON: {category: top|bottom|shoes|acc, colors: [up to 2 from black,white,olive,beige,gray,green,blue,brown], styles: [up to 2 from casual,smart,street,minimal,sport,oldmoney,business,classic,tech,oversize,party], query: "short Russian marketplace search phrase, 2-4 words", summary: "1 Russian sentence describing the item"}. Only JSON.',
+    user: 'What item is in the photo? JSON only.',
+    images: [image],
+    required: [], tag: 'vision', maxTokens: 300
+  });
+  const colors = Array.isArray(obj.colors) ? obj.colors.filter((c) => R.COLOR_RU[c]).slice(0, 2) : [];
+  const styles = Array.isArray(obj.styles) ? obj.styles.filter((s) => R.STYLE_RU[s]).slice(0, 2) : [];
+  const cats = ['top', 'bottom', 'shoes', 'acc'];
+  const out = {
+    source: 'qwen-vision', category: cats.includes(obj.category) ? obj.category : '',
+    colors, styles, query: String(obj.query || '').slice(0, 60),
+    summary: String(obj.summary || obj.description || '').slice(0, 200)
+  };
+  setCache('vision_items', key, out);
+  return Object.assign({ cached: false }, out);
+}
 function demoBrain(message, profile, ctx) {
   const parsed = R.nlParse(message);
   const hasQ = parsed.category || parsed.color || parsed.maxPrice || parsed.style;
@@ -252,9 +279,9 @@ function demoBrain(message, profile, ctx) {
   else reply = `Подберу варианты в пределах твоего бюджета. Уточни, если нужно: категория, цвет или повод — например «брюки на выход».` + (wr ? ' Заодно сверюсь с твоим гардеробом.' : '');
   return { intent: hasQ || parsed.occasion ? 'find_products' : 'chat', searchCriteria: parsed, message: reply, source: 'demo' };
 }
-async function chat({ message, conversationId, profile, feedback, uid, wardrobe }) {
+async function chat({ message, conversationId, profile, feedback, uid, wardrobe, image }) {
   const msg = String(message || '').slice(0, 500);
-  if (!msg.trim()) throw Q.err('BAD_REQUEST', 'Пустое сообщение', 400);
+  if (!msg.trim() && !image) throw Q.err('BAD_REQUEST', 'Пустое сообщение', 400);
   const cid = conversationId || ('c' + Date.now());
   const store = require('./store');
   const chats = uid ? store.UD(uid).chats : {};
@@ -263,7 +290,26 @@ async function chat({ message, conversationId, profile, feedback, uid, wardrobe 
   chats[cid].push({ role: 'user', text: msg, t: Date.now() });  const weather = await getWeather();
   const ctx = { weather, season: R.currentSeason(), wardrobe: wr };
   let out;
-  if (!Q.isConfigured(CFG.qwen.stylist)) {
+  /* Фото вещи: вижен описывает → критерии → поиск похожих. */
+  if (image) {
+    if (typeof image !== 'string' || image.length > 1200000) throw Q.err('BAD_IMAGE', 'Фото слишком большое', 400);
+    const seen = await describeItem(image);
+    const crit = { category: seen.category, color: (seen.colors || [])[0] || '', style: (seen.styles || [])[0] || '', size: profile.topSize || '' };
+    const pipe = await searchPipeline({ struct: crit, text: seen.query, profile, feedback, limit: 50, wardrobe: wr });
+    let text = seen.summary ? `Вижу: ${seen.summary} Ищу похожие.` : 'Разобрал фото, ищу похожие вещи.';
+    if (Q.isConfigured(CFG.qwen.stylist)) {
+      try {
+        const a = await Q.chatJSON(CFG.qwen.stylist, {
+          system: 'You are an AI stylist. The user uploaded a photo of an item: ' + (seen.summary || seen.query) + '. Criteria: ' + JSON.stringify(crit) + '. Reply in Russian, max 2 short sentences: confirm what you see and that you are finding similar items.',
+          user: msg || 'Найди похожие.',
+          required: [], tag: 'stylist', maxTokens: 200
+        });
+        const n = normalizeStylist(a);
+        if (n.message) text = n.message;
+      } catch (e) { /* оставляем шаблонный ответ */ }
+    }
+    out = { intent: 'find_similar', searchCriteria: crit, suggestQuery: seen.query, message: text, products: pipe.items, total: pipe.total, conversationId: cid, aiMode: Q.isConfigured(CFG.qwen.stylist) ? 'production' : 'demo', seen };
+  } else if (!Q.isConfigured(CFG.qwen.stylist)) {
     const d = demoBrain(msg, profile, ctx);
     const pipe = await searchPipeline({ struct: d.searchCriteria, profile, feedback, limit: 50, wardrobe: wr });
     out = Object.assign({}, d, { products: pipe.items, total: pipe.total, conversationId: cid, aiMode: 'demo' });

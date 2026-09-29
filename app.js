@@ -154,7 +154,7 @@ try {
 } catch (e) {}
 S.route = (S.done && S.token) ? 'home' : 'welcome'; S.params = {};
 function save() {
-  try { localStorage.setItem(LS, JSON.stringify({ profile: S.profile, photo: S.photo, aiNote: S.aiNote, done: S.done, favorites: S.favorites, savedOutfits: S.savedOutfits, chat: S.chat.slice(-30), cid: S.cid, ob: S.ob, token: S.token, login: S.login, aiModel: S.aiModel })); } catch (e) {}
+  try { localStorage.setItem(LS, JSON.stringify({ profile: S.profile, photo: S.photo, aiNote: S.aiNote, done: S.done, favorites: S.favorites, savedOutfits: S.savedOutfits, chat: S.chat.slice(-30).map((m) => { const c = Object.assign({}, m); delete c.img; return c; }), cid: S.cid, ob: S.ob, token: S.token, login: S.login, aiModel: S.aiModel })); } catch (e) {}
 }
 
 /* ---------- router ---------- */
@@ -432,7 +432,7 @@ function timeOf(t) {
   catch (e) { return ''; }
 }
 function msgHtml(m) {
-  if (m.role === 'me') return `<div class="mrow me"><div class="m me">${esc(m.text)}</div></div>`;
+  if (m.role === 'me') return `<div class="mrow me"><div class="m me">${m.img ? `<img class="methumb" src="${m.img}" alt="">` : ''}${esc(m.text)}</div></div>`;
   let inner = m.loading ? `<span class="ld"><i></i><i></i><i></i></span>` : esc(m.text);
   const live = (m.live || []).map((id) => RC[id]).filter(Boolean);
   if (live.length) {
@@ -482,7 +482,8 @@ function vHome() {
       </div>
       ${!S.chat.length ? `<div class="qchips">${['Образ на осень', 'Чёрная куртка', 'Что-то минималистичное', 'Собери образ', 'Белые кроссовки', 'Брюки до 3000'].map((q) => `<button onclick="ask('${esc(q)}')">${q}</button>`).join('')}</div>`
       : `<div class="qchips">${['Собери образ', 'Покажи дешевле', 'Другой стиль', 'В стиле old money', 'Что надеть осенью', 'Чёрные брюки', 'Белые кроссовки'].map((q) => `<button onclick="ask('${esc(q)}')">${q}</button>`).join('')}</div>`}
-      <div class="aibar"><textarea id="ainput" rows="1" placeholder="Что подобрать?" autocomplete="off" oninput="autoGrow(this)" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();send()}"></textarea><button onclick="send()" aria-label="Отправить">${ic('send', 18)}</button></div>
+      ${CHAT_IMG ? `<div class="chatprev"><img src="${CHAT_IMG}" alt="Прикреплённое фото"><button onclick="chatImgClear()" aria-label="Убрать фото">${ic('x', 14)}</button></div>` : ''}
+      <div class="aibar"><button class="plusbtn" onclick="chatPhoto()" aria-label="Прикрепить фото">${ic('plus', 20)}</button><textarea id="ainput" rows="1" placeholder="Что подобрать?" autocomplete="off" oninput="autoGrow(this)" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();send()}"></textarea><button onclick="send()" aria-label="Отправить">${ic('send', 18)}</button></div>
     </div>
 
     <div class="sect"><h2>${esc(S.feed.title)}</h2>${S.feed.total ? `<span>${S.feed.total}</span>` : ''}</div>
@@ -520,19 +521,51 @@ window.ask = function (t) { askAI(t); };
 window.send = function () { const i = $('#ainput'); if (i) { askAI(i.value); i.value = ''; autoGrow(i); } };
 window.autoGrow = function (el) { if (!el) return; el.style.height = 'auto'; el.style.height = Math.min(120, el.scrollHeight) + 'px'; };
 let __asking = false;
+let CHAT_IMG = null;
+window.chatPhoto = function () {
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = 'image/*';
+  inp.onchange = () => {
+    const f = inp.files && inp.files[0];
+    if (!f || !f.type.startsWith('image/')) return;
+    const r = new FileReader();
+    r.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const k = Math.min(1, 768 / Math.max(img.width, img.height));
+          const c = document.createElement('canvas');
+          c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+          c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+          CHAT_IMG = c.toDataURL('image/jpeg', 0.8);
+        } catch (e) { CHAT_IMG = r.result; }
+        if (CHAT_IMG && CHAT_IMG.length > 1100000) { CHAT_IMG = null; toast('Фото слишком большое'); }
+        render();
+      };
+      img.onerror = () => { toast('Не получилось прочитать фото'); };
+      img.src = r.result;
+    };
+    r.readAsDataURL(f);
+  };
+  inp.click();
+};
+window.chatImgClear = function () { CHAT_IMG = null; render(); };
 function shortModel(m) {
   if (!m) return '';
   const base = String(m).split('/').pop().split(':')[0];
   return base.replace(/-/g, ' ').slice(0, 24);
 }
-async function askAI(text) {
+async function askAI(text, img) {
   text = (text || '').trim();
-  if (!text || __asking) return;
+  img = img || CHAT_IMG;
+  if ((!text && !img) || __asking) return;
+  if (!Api.ok && img) { toast('Фото ищет только онлайн с подключённым AI'); return; }
   __asking = true;
   if (S.route !== 'home') go('home');
   S.cid = S.cid || ('c' + Date.now());
   const lastMe = [...S.chat].reverse().find((x) => x.role === 'me');
-  if (!lastMe || lastMe.text !== text) S.chat.push({ role: 'me', text, id: 'm' + Date.now() + 'u', t: Date.now() });
+  if (!lastMe || lastMe.text !== text || (img && lastMe.img !== img)) S.chat.push({ role: 'me', text: text || 'Найди похожие', img: img || null, id: 'm' + Date.now() + 'u', t: Date.now() });
+  CHAT_IMG = null;
   const mid = 'm' + Date.now();
   S.chat.push({ role: 'ai', text: '', loading: true, id: mid, t: Date.now() });
   save(); render();
@@ -540,12 +573,12 @@ async function askAI(text) {
     S.chat = S.chat.map((m) => m.id === mid ? Object.assign(m, patch, { loading: false, t: Date.now() }) : m);
     if (patch.outfit) RC['chatfit'] = patch.outfit;
     if (patch.model) S.aiModel = shortModel(patch.model);
-    S.lastResult = { query: text, message: patch.text || '', picks: patch.allPicks || patch.picks || [], live: patch.live || [], outfit: patch.outfit || null, total: patch.total || 0, ok: !patch.error };
+    S.lastResult = { query: text, queryImg: img || null, message: patch.text || '', picks: patch.allPicks || patch.picks || [], live: patch.live || [], outfit: patch.outfit || null, total: patch.total || 0, ok: !patch.error };
     save(); __asking = false;
     go('results');
   };
   try {
-    const r = await Api.post('/api/ai/chat', { message: text, conversationId: S.cid });
+    const r = await Api.post('/api/ai/chat', { message: text, conversationId: S.cid, image: img || null });
     const d = r.data || {};
     S.cid = d.conversationId || S.cid;
     (d.products || []).forEach((p) => { RC[p.id] = p; });
@@ -557,9 +590,9 @@ async function askAI(text) {
       } catch (e) {}
     }
     /* Живьём с WB: прямой запрос из браузера + скоринг тем же движком.
-       Без скоринга не показываем, чтобы не врать про проценты. */
+       Для фото используем suggestQuery от вижена, а не текст кнопки. */
     try {
-      const raw = await WBClient.searchText(text, 60);
+      const raw = await WBClient.searchText(d.suggestQuery || text, 60);
       if (raw.length) {
         const s = await Api.post('/api/market/score', { items: raw, struct: {} });
         (s.items || []).forEach((p) => { RC[p.id] = p; });
@@ -619,7 +652,7 @@ function vResults() {
   return `<div class="wrap">
     <div class="row"><button class="iconbtn" onclick="go('home')" aria-label="Назад">${ic('back', 19)}</button>
     <div class="grow"><span class="small muted">Запрос · ${esc(r.query || '')}</span></div></div>
-    <div class="answer"><span class="ai-ava light">${ic('spark', 15)}</span><p>${esc(r.message)}</p></div>
+    <div class="answer"><span class="ai-ava light">${ic('spark', 15)}</span><div>${r.queryImg ? `<img class="qthumb" src="${r.queryImg}" alt="">` : ''}<p>${esc(r.message)}</p></div></div>
     ${r.outfit ? `<div class="sect"><h2>Готовый образ</h2></div>${outfitCard(r.outfit)}` : ''}
     ${live.length ? `<div class="sect"><h2>Живьём · WB</h2><span>реальные цены</span></div>
     <div class="feed">${live.map((x, i) => cardHtml(x, i)).join('')}</div>` : ''}
