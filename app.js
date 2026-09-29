@@ -166,7 +166,7 @@ function go(route, params) {
 window.go = go;
 window.__on401 = function () {
   S.token = null; save();
-  if (NEED_AUTH.includes(S.route)) go('auth');
+  if (NEED_AUTH.includes(S.route)) { S.authErr = 'Сессия истекла — войди заново.'; go('auth'); }
 };
 const TABS = [['home', 'Главная', 'home'], ['outfits', 'Образы', 'shirt'], ['favorites', 'Сохранённое', 'heart'], ['profile', 'Профиль', 'user']];
 function render() {
