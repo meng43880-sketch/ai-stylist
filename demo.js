@@ -57,7 +57,7 @@ const Demo = (() => {
     if (/привет|здравствуй/i.test(text)) message = `Привет, ${profile.name || 'друг'}! Скажи, что подобрать — например «куртка на осень до 7000».`;
     else if (st.occasion === 'date') message = 'Для свидания соберу smart-вариант: рубашка, прямые брюки, чистая обувь.';
     else if (st.occasion === 'autumn') message = 'На осень возьмём второй слой: куртка или overshirt плюс джинсы.';
-    else if (hasQ) message = 'Понял запрос. Показываю лучшее по твоему профилю — это демо-режим витрины.';
+    else if (hasQ) message = 'Понял запрос. Показываю лучшее по твоему профилю.';
     else message = 'Подберу варианты в пределах твоего бюджета. Уточни категорию, цвет или повод.';
     const items = search(st, profile, {});
     return { message, ids: items.slice(0, 8).map((p) => p.id), items, total: items.length };
@@ -71,7 +71,7 @@ const Demo = (() => {
       const t = tops[i % tops.length], b = bots[i % bots.length], s = shoes[i % shoes.length], a = accs[(i + 1) % accs.length];
       const items = [t, b, s].concat(i % 2 === 0 && a ? [a] : []);
       const total = items.reduce((x, y) => x + y.price, 0);
-      out.push({ id: 'demo-o' + i, name: i === 0 ? 'Демо-образ · smart casual' : 'Демо-образ №2', items: items.map((x) => x.id), total, score: Math.round(items.reduce((x, y) => x + y.aiScore, 0) / items.length) });
+      out.push({ id: 'demo-o' + i, name: i === 0 ? 'Образ · smart casual' : 'Образ №2', items: items.map((x) => x.id), total, score: Math.round(items.reduce((x, y) => x + y.aiScore, 0) / items.length) });
     }
     return out;
   }

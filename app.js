@@ -211,8 +211,6 @@ function vParams() {
     <div class="grid3"><div class="field"><label>Верх</label><input class="input" id="f_top" value="${esc(p.topSize)}"></div>
     <div class="field"><label>Низ</label><input class="input" id="f_pa" value="${esc(p.pantsSize)}"></div>
     <div class="field"><label>Обувь</label><input class="input" id="f_sh" value="${esc(p.shoeSize)}"></div></div>
-    ${S.done ? `<div class="field"><label>Бюджет, до ₽</label><input class="input" id="f_b" type="number" step="500" value="${p.budget}"></div>`
-    : `<div class="note">Про бюджет спросим позже — сначала посмотри, что мы умеем.</div>`}
     <div style="height:16px"></div>
     <button class="btn" onclick="saveParams()">Дальше</button><div style="height:24px"></div></div>`;
 }
@@ -224,7 +222,6 @@ window.saveParams = function () {
     topSize: g('f_top') || 'L', pantsSize: g('f_pa') || '32', shoeSize: g('f_sh') || '43'
   });
   if (S.done) {
-    if (g('f_b')) S.profile.budget = +g('f_b') || S.profile.budget;
     save();
     Api.post('/api/profile', { profile: S.profile }).catch(() => {});
     go('profile');
@@ -322,7 +319,7 @@ async function loadFeed(query) {
   } catch (e) {
     const items = query ? Demo.search(Demo.parse(query), S.profile, demoFb()) : Demo.rank(Demo.PRODUCTS, S.profile, demoFb());
     items.forEach((p) => { RC[p.id] = p; });
-    S.feed = { title: query ? `«${query}» · демо` : 'Для тебя · демо', items, total: items.length };
+    S.feed = { title: query ? `«${query}»` : 'Для тебя', items, total: items.length };
   }
 }
 async function loadOutfits() {
@@ -439,8 +436,7 @@ async function askAI(text) {
   const fin = (patch) => {
     S.chat = S.chat.map((m) => m.id === mid ? Object.assign(m, patch, { loading: false }) : m);
     if (patch.outfit) RC['chatfit'] = patch.outfit;
-    S.lastResult = { query: text, message: patch.text || '', picks: patch.allPicks || patch.picks || [], live: patch.live || [], liveBlocked: !!patch.liveBlocked, outfit: patch.outfit || null, total: patch.total || 0, ok: !patch.error };
-    S.resMp = 'all';
+    S.lastResult = { query: text, message: patch.text || '', picks: patch.allPicks || patch.picks || [], live: patch.live || [], outfit: patch.outfit || null, total: patch.total || 0, ok: !patch.error };
     save(); __asking = false;
     go('results');
   };
@@ -514,18 +510,15 @@ window.makeOutfits = async function () { await loadOutfits(); render(); };
 function vResults() {
   const r = S.lastResult;
   if (!r) return `<div class="wrap"><div class="empty"><h3>Пока нет ответа</h3><button class="btn secondary" onclick="go('home')">Домой</button></div></div>`;
-  const mp = S.resMp || 'all';
-  const items = (r.picks || []).map((id) => RC[id]).filter(Boolean).filter((p) => mp === 'all' || (mp === 'demo' && !p.live));
-  const live = (r.live || []).map((id) => RC[id]).filter(Boolean).filter(() => mp === 'all' || mp === 'wb');
+  const items = (r.picks || []).map((id) => RC[id]).filter(Boolean);
+  const live = (r.live || []).map((id) => RC[id]).filter(Boolean);
   return `<div class="wrap">
     <div class="row"><button class="iconbtn" onclick="go('home')" aria-label="Назад">${ic('back', 19)}</button>
     <div class="grow"><span class="small muted">Запрос · ${esc(r.query || '')}</span></div></div>
     <div class="answer"><span class="ai-ava light">${ic('spark', 15)}</span><p>${esc(r.message)}</p></div>
-    <div class="chips" style="margin-top:12px">${[['all', 'Все'], ['wb', 'WB · живьём'], ['demo', 'Демо-каталог']].map(([v, t]) => `<button class="chip ${(S.resMp || 'all') === v ? 'on' : ''}" onclick="resMp('${v}')">${t}</button>`).join('')}</div>
     ${r.outfit ? `<div class="sect"><h2>Готовый образ</h2></div>${outfitCard(r.outfit)}` : ''}
     ${live.length ? `<div class="sect"><h2>Живьём · WB</h2><span>реальные цены</span></div>
-    <div class="feed">${live.map((x, i) => cardHtml(x, i)).join('')}</div>`
-    : (r.liveBlocked ? `<div class="note">Живьём с WB не получилось — сеть режет запросы к маркетплейсу. Ниже демо-подборка, она считается честно тем же движком.</div>` : '')}
+    <div class="feed">${live.map((x, i) => cardHtml(x, i)).join('')}</div>` : ''}
     ${items.length ? `<div class="sect"><h2>Лучшее для тебя</h2>${r.total ? `<span>${r.total}</span>` : ''}</div>
     <div class="feed">${items.map((x, i) => cardHtml(x, i)).join('')}</div>` : ''}
     ${!items.length && !live.length && !r.outfit && r.ok ? `<div class="empty"><h3>Ничего не нашлось</h3><p class="small">Попробуй переформулировать запрос.</p></div>` : ''}
@@ -533,7 +526,6 @@ function vResults() {
     ${(items.length || live.length) ? `<div class="cta"><button class="btn" onclick="feedFromResult()">${ic('check', 16)} В ленту на главной</button></div>` : ''}
   </div>`;
 }
-window.resMp = function (v) { S.resMp = v; render(); };
 window.feedFromResult = function () {
   const r = S.lastResult; if (!r) return;
   const items = ((r.live || []).concat(r.picks || [])).map((id) => RC[id]).filter(Boolean);
@@ -839,17 +831,17 @@ function vProfile() {
     <div class="row">${S.photo ? `<img class="avatar" style="width:60px;height:60px;font-size:22px" src="${S.photo}" alt="">` : `<div class="avatar" style="width:60px;height:60px;font-size:22px">${esc((p.name || 'А')[0])}</div>`}
     <div><h1 class="title" style="font-size:24px">${esc(p.name)}</h1><p class="sub" style="margin-top:2px">${p.height} см · ${p.weight} кг · ${esc(p.topSize)} / ${esc(p.pantsSize)} / ${esc(p.shoeSize)}</p></div></div>
     ${S.aiNote ? `<div class="note">${esc(S.aiNote)}</div>` : ''}
-    <div class="stat"><div><b>${S.savedOutfits.length}</b><span>образов</span></div><div><b>${S.favorites.length}</b><span>сохранено</span></div><div><b>${fmt(p.budget).replace(' ₽', '')}</b><span>бюджет ₽</span></div></div>
+    <div class="stat" style="grid-template-columns:1fr 1fr"><div><b>${S.savedOutfits.length}</b><span>образов</span></div><div><b>${S.favorites.length}</b><span>сохранено</span></div></div>
     <div style="height:10px"></div>
     <button class="menurow" onclick="go('wardrobe')">${ic('shirt', 19)}<span>Мой гардероб<small>${S.wardrobe.items.length ? S.wardrobe.items.length + ' вещей · AI учитывает вкус' : 'Добавь свои вещи — лента станет точнее'}</small></span>${ic('chevR', 16)}</button>
-    <button class="menurow" onclick="go('params')">${ic('sliders', 19)}<span>Мои параметры<small>Рост, размеры, бюджет</small></span>${ic('chevR', 16)}</button>
+    <button class="menurow" onclick="go('params')">${ic('sliders', 19)}<span>Мои параметры<small>Рост, размеры</small></span>${ic('chevR', 16)}</button>
     <button class="menurow" onclick="go('outfits')">${ic('shirt', 19)}<span>Мои образы<small>${S.savedOutfits.length} сохранено</small></span>${ic('chevR', 16)}</button>
     <button class="menurow" onclick="go('privacy')">${ic('info', 19)}<span>Конфиденциальность<small>Что храним и зачем</small></span>${ic('chevR', 16)}</button>
     <button class="menurow" onclick="wipe()">${ic('trash', 19)}<span>Удалить мои данные<small>Фото, профиль, история</small></span>${ic('chevR', 16)}</button>
     <div style="height:20px"></div></div>`;
 }
 window.wipe = async function () {
-  try { await Api.req('/api/profile', { method: 'DELETE' }); } catch (e) {}
+  if (!confirm('Удалить все мои данные? Фото, профиль, гардероб и история исчезнут безвозвратно.')) return;  try { await Api.req('/api/profile', { method: 'DELETE' }); } catch (e) {}
   localStorage.removeItem(LS);
   S = Object.assign(S, { profile: S.profile, done: false, photo: null, favorites: [], savedOutfits: [], chat: [], wardrobe: { items: [], insights: null }, gapItems: [], feed: { title: 'Для тебя', items: [], total: 0 } });
   save(); go('welcome');
