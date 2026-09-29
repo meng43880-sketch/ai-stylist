@@ -481,7 +481,8 @@ function vHome() {
         ${!S.chat.length ? `<div class="mrow"><span class="ai-ava2">${spark(13)}</span><div class="m ai">Привет! Скажи, что ищем — подберу вещи и соберу образ. Например: «куртка на осень до 7000».</div></div>` : ''}
         ${S.chat.slice(-10).map(msgHtml).join('')}
       </div>
-      ${!S.chat.length ? `<div class="qchips">${['Образ на осень', 'Чёрная куртка', 'Что-то минималистичное', 'Собери образ'].map((q) => `<button onclick="ask('${esc(q)}')">${q}</button>`).join('')}</div>` : ''}
+      ${!S.chat.length ? `<div class="qchips">${['Образ на осень', 'Чёрная куртка', 'Что-то минималистичное', 'Собери образ', 'Белые кроссовки', 'Брюки до 3000'].map((q) => `<button onclick="ask('${esc(q)}')">${q}</button>`).join('')}</div>`
+      : `<div class="qchips">${['Собери образ', 'Покажи дешевле', 'Другой стиль', 'В стиле old money', 'Что надеть осенью', 'Чёрные брюки', 'Белые кроссовки'].map((q) => `<button onclick="ask('${esc(q)}')">${q}</button>`).join('')}</div>`}
       <div class="aibar"><textarea id="ainput" rows="1" placeholder="Что подобрать?" autocomplete="off" oninput="autoGrow(this)" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();send()}"></textarea><button onclick="send()" aria-label="Отправить">${ic('send', 18)}</button></div>
     </div>
 
