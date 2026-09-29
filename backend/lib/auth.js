@@ -80,14 +80,13 @@ function getUserByToken(token) {
   const store = AuthUsers();
   const s = store.db.sessions[token];
   if (!s) return null;
-  if (Date.now() - s.createdAt > SESSION_TTL) { delete store.db.sessions[token]; store.save(); return null; }
+  if (Date.now() - s.createdAt > SESSION_TTL) { store.dropSession(token); return null; }
   const user = store.db.users.find((u) => u.id === s.userId);
   return user || null;
 }
 function logout(token) {
   if (!token) return;
   const store = AuthUsers();
-  delete store.db.sessions[token];
-  store.save();
+  store.dropSession(token);
 }
 module.exports = { AuthProvider, LocalAuthProvider, WbIdProvider, register, login, logout, getUserByToken };

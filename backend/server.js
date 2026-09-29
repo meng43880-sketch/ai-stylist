@@ -274,6 +274,9 @@ async function route(req, res) {
   }
 }
 const HOST = process.env.HOST || '0.0.0.0';
-http.createServer(route).listen(CFG.port, HOST, () => {
-  console.log(`AI-Stylist backend on http://${HOST}:${CFG.port}  aiMode=${CFG.aiMode} data=${CFG.dataSource} season=${R.currentSeason()}`);
-});
+const store = require('./lib/store');
+store.init().then(() => {
+  http.createServer(route).listen(CFG.port, HOST, () => {
+    console.log(`AI-Stylist backend on http://${HOST}:${CFG.port}  aiMode=${CFG.aiMode} data=${CFG.dataSource} season=${R.currentSeason()}`);
+  });
+}).catch((e) => { console.error('store init failed:', e.message); process.exit(1); });
