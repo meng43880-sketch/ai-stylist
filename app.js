@@ -964,18 +964,37 @@ window.__loadFav = async function () {
 };
 function vProfile() {
   const p = S.profile;
+  const ins = (S.wardrobe && S.wardrobe.insights) || null;
+  const styleNames = { casual: 'Повседневный', smart: 'Smart casual', street: 'Streetwear', minimal: 'Минимализм', sport: 'Спорт', oldmoney: 'Old money', business: 'Деловой', classic: 'Классика', oversize: 'Oversize', party: 'На выход' };
+  const colorNames = { black: 'Чёрный', white: 'Белый', olive: 'Олива', beige: 'Бежевый', gray: 'Серый', green: 'Зелёный', blue: 'Синий', brown: 'Коричневый' };
+  const colorHex = { black: '#171717', white: '#FFFFFF', olive: '#6B7C3A', beige: '#D9C7A7', gray: '#9AA0A3', green: '#134E3A', blue: '#3B5BFF', brown: '#7A5230' };
   return `<div class="wrap">
-    <div class="row">${S.photo ? `<img class="avatar" style="width:60px;height:60px;font-size:22px" src="${S.photo}" alt="">` : `<div class="avatar" style="width:60px;height:60px;font-size:22px">${esc((p.name || 'А')[0])}</div>`}
-    <div><h1 class="title" style="font-size:24px">${esc(p.name)}</h1><p class="sub" style="margin-top:2px">${p.height} см · ${p.weight} кг · ${esc(p.topSize)} / ${esc(p.pantsSize)} / ${esc(p.shoeSize)}</p></div></div>
-    ${S.aiNote ? `<div class="note">${esc(S.aiNote)}</div>` : ''}
-    <div class="stat" style="grid-template-columns:1fr 1fr"><div><b>${S.savedOutfits.length}</b><span>образов</span></div><div><b>${S.favorites.length}</b><span>сохранено</span></div></div>
-    <div style="height:10px"></div>
-    <button class="menurow" onclick="go('wardrobe')">${ic('shirt', 19)}<span>Мой гардероб<small>${S.wardrobe.items.length ? S.wardrobe.items.length + ' вещей · AI учитывает вкус' : 'Добавь свои вещи — лента станет точнее'}</small></span>${ic('chevR', 16)}</button>
-    <button class="menurow" onclick="go('params')">${ic('sliders', 19)}<span>Мои параметры<small>Рост, размеры</small></span>${ic('chevR', 16)}</button>
-    <button class="menurow" onclick="go('outfits')">${ic('shirt', 19)}<span>Мои образы<small>${S.savedOutfits.length} сохранено</small></span>${ic('chevR', 16)}</button>
-    <button class="menurow" onclick="go('privacy')">${ic('info', 19)}<span>Конфиденциальность<small>Что храним и зачем</small></span>${ic('chevR', 16)}</button>
-    <button class="menurow" onclick="logout()">${ic('user', 19)}<span>Выйти<small>${esc(S.login || 'аккаунт')}</small></span>${ic('chevR', 16)}</button>
-    <button class="menurow" onclick="wipe()">${ic('trash', 19)}<span>Удалить мои данные<small>Фото, профиль, история</small></span>${ic('chevR', 16)}</button>
+    <div class="phead">
+      <label class="pava">${S.photo ? `<img src="${S.photo}" alt="">` : `<span>${esc((p.name || 'А')[0])}</span>`}<span class="cam">${ic('camera', 14)}</span><input type="file" accept="image/*" hidden onchange="onPhoto(event)"></label>
+      <h1>${esc(p.name)}</h1>
+      <p>@${esc(S.login || 'гость')} · ${SEASON_RU[S.ctx.season] || ''}</p>
+      <p class="params">${p.height} см · ${p.weight} кг · ${esc(p.topSize)} / ${esc(p.pantsSize)} / ${esc(p.shoeSize)}</p>
+    </div>
+    <div class="taste">
+      <div class="row"><span class="tlabel">Твой вкус</span>${ic('spark', 14)}</div>
+      ${ins && ins.count ? `<div class="tcolors">${ins.colors.map((c) => `<span style="background:${colorHex[c] || '#ccc'}"></span>`).join('')}</div>
+      <p>${(ins.styles || []).map((s) => styleNames[s] || s).join(' · ') || 'Разное'} · ${ins.count} вещей в гардеробе</p>`
+      : `<p>Добавь вещи в гардероб — здесь появится твоя палитра и стили, а подборки станут точнее.</p>
+      <button class="tbtn" onclick="go('wardrobe')">Открыть гардероб</button>`}
+    </div>
+    <div class="pstats"><div><b>${S.savedOutfits.length}</b><span>образов</span></div><div><b>${S.favorites.length}</b><span>сохранено</span></div><div><b>${(S.wardrobe.items || []).length}</b><span>в гардеробе</span></div></div>
+    <div class="pgroup"><div class="ptitle">Стиль</div>
+      <button class="prow" onclick="go('wardrobe')"><span class="tint">${ic('shirt', 18)}</span><span>Мой гардероб<small>AI учитывает вкус</small></span>${ic('chevR', 16)}</button>
+      <button class="prow" onclick="go('outfits')"><span class="tint">${ic('star', 18)}</span><span>Мои образы<small>${S.savedOutfits.length} сохранено</small></span>${ic('chevR', 16)}</button>
+      <button class="prow" onclick="go('params')"><span class="tint">${ic('sliders', 18)}</span><span>Мои параметры<small>Рост, размеры</small></span>${ic('chevR', 16)}</button>
+    </div>
+    <div class="pgroup"><div class="ptitle">Аккаунт</div>
+      <button class="prow" onclick="go('privacy')"><span class="tint">${ic('info', 18)}</span><span>Конфиденциальность</span>${ic('chevR', 16)}</button>
+      <button class="prow" onclick="logout()"><span class="tint">${ic('user', 18)}</span><span>Выйти<small>${esc(S.login || '')}</small></span>${ic('chevR', 16)}</button>
+    </div>
+    <div class="pgroup danger">
+      <button class="prow" onclick="wipe()"><span class="tint red">${ic('trash', 18)}</span><span>Удалить мои данные</span></button>
+    </div>
     <div style="height:20px"></div></div>`;
 }
 window.wipe = async function () {
