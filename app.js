@@ -37,6 +37,7 @@ const P = {
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5 5l1.8 1.8M17.2 17.2 19 19M19 5l-1.8 1.8M6.8 17.2 5 19"/>'
 };
 const ic = (n, s) => `<svg width="${s || 20}" height="${s || 20}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[n] || ''}</svg>`;
+function spark(size) { return ic('spark', size || 13); }
 
 /* ---------- api ---------- */
 const Api = {
@@ -153,7 +154,7 @@ try {
 } catch (e) {}
 S.route = (S.done && S.token) ? 'home' : 'welcome'; S.params = {};
 function save() {
-  try { localStorage.setItem(LS, JSON.stringify({ profile: S.profile, photo: S.photo, aiNote: S.aiNote, done: S.done, favorites: S.favorites, savedOutfits: S.savedOutfits, chat: S.chat.slice(-30), cid: S.cid, ob: S.ob, token: S.token, login: S.login })); } catch (e) {}
+  try { localStorage.setItem(LS, JSON.stringify({ profile: S.profile, photo: S.photo, aiNote: S.aiNote, done: S.done, favorites: S.favorites, savedOutfits: S.savedOutfits, chat: S.chat.slice(-30), cid: S.cid, ob: S.ob, token: S.token, login: S.login, aiModel: S.aiModel })); } catch (e) {}
 }
 
 /* ---------- router ---------- */
@@ -427,25 +428,45 @@ async function loadGaps() {
 function pickHtml(p) {
   return `<button class="pick" onclick="go('product',{id:'${p.id}'})">${IM(p.img, p.title)}<span class="pi"><b>${p.aiScore || ''}% · ${fmt(p.price)}</b><span>${esc(p.title)}</span></span></button>`;
 }
+function timeOf(t) {
+  try { const d = new Date(t || Date.now()); return d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0'); }
+  catch (e) { return ''; }
+}
 function msgHtml(m) {
-  if (m.role === 'me') return `<div class="m me">${esc(m.text)}</div>`;
-  let h = `<div class="m ai">`;
-  h += m.loading ? `<span class="ld"><i></i><i></i><i></i></span>` : esc(m.text);
+  if (m.role === 'me') return `<div class="mrow me"><div class="m me">${esc(m.text)}</div></div>`;
+  let inner = m.loading ? `<span class="ld"><i></i><i></i><i></i></span>` : esc(m.text);
   const live = (m.live || []).map((id) => RC[id]).filter(Boolean);
   if (live.length) {
-    h += `<div class="livelabel"><span class="livedot"></span>Живьём · Wildberries</div><div class="pickrow">${live.map(pickHtml).join('')}</div>`;
+    inner += `<div class="livelabel" style="margin-top:8px"><span class="livedot"></span>Живьём · Wildberries</div><div class="pickrow">${live.map(pickHtml).join('')}</div>`;
   }
   const valid = (m.picks || []).filter((id) => RC[id]);
   if (valid.length) {
-    h += `<div class="pickrow">${valid.map((id) => pickHtml(RC[id])).join('')}</div>`;
-    h += `<button class="link" style="color:#8FE388;padding:10px 0 0" onclick="feedFromChat('${m.id}')">Показать в ленте ${ic('chevR', 14)}</button>`;
+    inner += `<div class="pickrow">${valid.map((id) => pickHtml(RC[id])).join('')}</div>`;
+    inner += `<button class="link" style="padding:10px 0 0" onclick="feedFromChat('${m.id}')">Показать в ленте ${ic('chevR', 14)}</button>`;
   }
   if (m.outfit) {
     const o = m.outfit;
-    h += `<div class="minioutfit" onclick="openChatOutfit('${m.id}')"><div class="coll">${o.items.slice(0, 4).map((p) => IM(p.img, p.title)).join('')}</div><div class="t"><span>${esc(o.name)}</span><b>${o.score}% · ${fmt(o.total)}</b></div></div>`;
+    inner += `<div class="minioutfit" onclick="openChatOutfit('${m.id}')"><div class="coll">${o.items.slice(0, 4).map((p) => IM(p.img, p.title)).join('')}</div><div class="t"><span>${esc(o.name)}</span><b>${o.score}% · ${fmt(o.total)}</b></div></div>`;
   }
-  return h + `</div>`;
+  const acts = m.loading ? '' : `<div class="macts"><button onclick="copyMsg('${m.id}')">Копировать</button><button onclick="retryLast()">Ещё вариант</button><span class="time">${timeOf(m.t)}</span></div>`;
+  return `<div class="mrow"><span class="ai-ava2">${spark(13)}</span><div style="min-width:0;max-width:88%"><div class="m ai">${inner}</div>${acts}</div></div>`;
 }
+window.copyMsg = function (id) {
+  const m = (S.chat || []).find((x) => x.id === id);
+  if (!m || !m.text) return;
+  const done = () => toast('Скопировано');
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(m.text).then(done, done);
+  else done();
+};
+window.retryLast = function () {
+  const me = [...S.chat].reverse().find((x) => x.role === 'me');
+  if (me) askAI(me.text);
+  else toast('Сначала спроси что-нибудь');
+};
+window.newChat = function () {
+  S.chat = []; S.cid = 'c' + Date.now(); save(); render();
+  toast('Новый диалог');
+};
 function vHome() {
   const p = S.profile;
   const w = S.ctx.weather;
@@ -455,13 +476,13 @@ function vHome() {
     ${S.photo ? `<img class="avatar" src="${S.photo}" onclick="go('profile')" alt="Профиль">` : `<button class="avatar" onclick="go('profile')">${esc((p.name || 'А')[0])}</button>`}</div>
 
     <div class="ai">
-      <div class="ai-head"><span class="pulse"></span>Стилист ${ic('spark', 14)}</div>
+      <div class="ai-head"><span class="ai-ava2">${spark(13)}</span>Стилист ${S.aiModel ? `<span class="model">· ${esc(S.aiModel)}</span>` : ''}<button class="newchat" onclick="newChat()" aria-label="Новый диалог">${ic('plus', 16)}</button></div>
       <div class="msgs" id="msgs">
-        ${!S.chat.length ? `<div class="m ai">Привет! Скажи, что ищем — подберу вещи и соберу образ. Например: «куртка на осень до 7000».</div>` : ''}
-        ${S.chat.slice(-8).map(msgHtml).join('')}
+        ${!S.chat.length ? `<div class="mrow"><span class="ai-ava2">${spark(13)}</span><div class="m ai">Привет! Скажи, что ищем — подберу вещи и соберу образ. Например: «куртка на осень до 7000».</div></div>` : ''}
+        ${S.chat.slice(-10).map(msgHtml).join('')}
       </div>
       ${!S.chat.length ? `<div class="qchips">${['Образ на осень', 'Чёрная куртка', 'Что-то минималистичное', 'Собери образ'].map((q) => `<button onclick="ask('${esc(q)}')">${q}</button>`).join('')}</div>` : ''}
-      <div class="aibar"><input id="ainput" placeholder="Что подобрать?" autocomplete="off" onkeydown="if(event.key==='Enter')send()"><button onclick="send()" aria-label="Отправить">${ic('send', 18)}</button></div>
+      <div class="aibar"><textarea id="ainput" rows="1" placeholder="Что подобрать?" autocomplete="off" oninput="autoGrow(this)" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();send()}"></textarea><button onclick="send()" aria-label="Отправить">${ic('send', 18)}</button></div>
     </div>
 
     <div class="sect"><h2>${esc(S.feed.title)}</h2>${S.feed.total ? `<span>${S.feed.total}</span>` : ''}</div>
@@ -496,21 +517,29 @@ function scrollMsgs() { setTimeout(() => { const m = $('#msgs'); if (m) m.scroll
 
 /* чат: вопрос → backend → ответ встраивается в главную */
 window.ask = function (t) { askAI(t); };
-window.send = function () { const i = $('#ainput'); if (i) askAI(i.value); };
+window.send = function () { const i = $('#ainput'); if (i) { askAI(i.value); i.value = ''; autoGrow(i); } };
+window.autoGrow = function (el) { if (!el) return; el.style.height = 'auto'; el.style.height = Math.min(120, el.scrollHeight) + 'px'; };
 let __asking = false;
+function shortModel(m) {
+  if (!m) return '';
+  const base = String(m).split('/').pop().split(':')[0];
+  return base.replace(/-/g, ' ').slice(0, 24);
+}
 async function askAI(text) {
   text = (text || '').trim();
   if (!text || __asking) return;
   __asking = true;
   if (S.route !== 'home') go('home');
   S.cid = S.cid || ('c' + Date.now());
-  S.chat.push({ role: 'me', text });
+  const lastMe = [...S.chat].reverse().find((x) => x.role === 'me');
+  if (!lastMe || lastMe.text !== text) S.chat.push({ role: 'me', text, id: 'm' + Date.now() + 'u', t: Date.now() });
   const mid = 'm' + Date.now();
-  S.chat.push({ role: 'ai', text: '', loading: true, id: mid });
+  S.chat.push({ role: 'ai', text: '', loading: true, id: mid, t: Date.now() });
   save(); render();
   const fin = (patch) => {
-    S.chat = S.chat.map((m) => m.id === mid ? Object.assign(m, patch, { loading: false }) : m);
+    S.chat = S.chat.map((m) => m.id === mid ? Object.assign(m, patch, { loading: false, t: Date.now() }) : m);
     if (patch.outfit) RC['chatfit'] = patch.outfit;
+    if (patch.model) S.aiModel = shortModel(patch.model);
     S.lastResult = { query: text, message: patch.text || '', picks: patch.allPicks || patch.picks || [], live: patch.live || [], outfit: patch.outfit || null, total: patch.total || 0, ok: !patch.error };
     save(); __asking = false;
     go('results');
@@ -520,7 +549,7 @@ async function askAI(text) {
     const d = r.data || {};
     S.cid = d.conversationId || S.cid;
     (d.products || []).forEach((p) => { RC[p.id] = p; });
-    const patch = { text: d.message || 'Готово.', picks: (d.products || []).slice(0, 6).map((p) => p.id), allPicks: (d.products || []).slice(0, 50).map((p) => p.id), total: d.total || 0 };
+    const patch = { text: d.message || 'Готово.', picks: (d.products || []).slice(0, 6).map((p) => p.id), allPicks: (d.products || []).slice(0, 50).map((p) => p.id), total: d.total || 0, model: d.model || d.aiMode };
     if (/образ/i.test(text)) {
       try {
         const o = await Api.post('/api/outfits', { count: 1 });

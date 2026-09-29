@@ -75,37 +75,45 @@ h1,h2,h3,p{margin:0}
 .avatar{width:42px;height:42px;border-radius:50%;object-fit:cover;background:var(--green);color:#fff;font-weight:700;display:flex;align-items:center;justify-content:center;font-size:17px;cursor:pointer;flex-shrink:0;border:none;font-family:var(--font)}
 
 /* AI chat card — сердце главной */
-.ai{margin-top:16px;background:var(--ink);color:#fff;border-radius:24px;padding:18px;overflow:hidden}
-.ai-head{display:flex;align-items:center;gap:9px;font-size:13px;font-weight:600}
-.ai-head .pulse{width:8px;height:8px;border-radius:50%;background:#8FE388;animation:dots 1.8s infinite}
-.ai-head .mode{margin-left:auto;font-size:11px;color:rgba(255,255,255,.55);font-weight:500}
-.msgs{display:flex;flex-direction:column;gap:10px;margin-top:12px;max-height:340px;overflow-y:auto;scrollbar-width:none}
+.ai{margin-top:16px;background:var(--card);border:1px solid var(--line);border-radius:24px;padding:16px;box-shadow:0 10px 30px rgba(0,0,0,.05)}
+.ai-head{display:flex;align-items:center;gap:9px;font-size:13.5px;font-weight:700}
+.ai-ava2{width:30px;height:30px;border-radius:50%;background:var(--ink);color:#8FE388;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.ai-head .model{font-size:11px;color:var(--muted);font-weight:500}
+.ai-head .newchat{margin-left:auto;width:34px;height:34px;border-radius:50%;background:none;border:none;color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center}
+.ai-head .newchat:active{transform:scale(.92)}
+.msgs{display:flex;flex-direction:column;gap:12px;margin-top:12px;max-height:380px;overflow-y:auto;scrollbar-width:none}
 .msgs::-webkit-scrollbar{display:none}
-.m{max-width:88%;padding:11px 14px;border-radius:16px;font-size:14.5px;line-height:1.5;animation:up .3s}
-.m.ai{background:rgba(255,255,255,.09);border-bottom-left-radius:6px;align-self:flex-start}
-.m.me{background:#fff;color:var(--ink);border-bottom-right-radius:6px;align-self:flex-end}
+.mrow{display:flex;gap:8px;align-items:flex-end;animation:up .3s}
+.mrow.me{justify-content:flex-end}
+.m{max-width:85%;padding:11px 14px;border-radius:18px;font-size:14.5px;line-height:1.5}
+.m.ai{background:#F1F1ED;border-bottom-left-radius:6px}
+.m.me{background:var(--green);color:#fff;border-bottom-right-radius:6px}
 .m .ld{display:inline-flex;gap:5px;padding:5px 2px}
-.m .ld i{width:6px;height:6px;border-radius:50%;background:#8FE388;animation:dots 1.1s infinite}
+.m .ld i{width:6px;height:6px;border-radius:50%;background:var(--green);animation:dots 1.1s infinite}
 .m .ld i:nth-child(2){animation-delay:.2s}.m .ld i:nth-child(3){animation-delay:.4s}
-.pickrow{display:flex;gap:8px;overflow-x:auto;margin-top:10px;scrollbar-width:none;padding-bottom:2px}
+.macts{display:flex;gap:2px;align-items:center;margin-top:6px}
+.macts button{background:none;border:none;color:var(--muted);font-size:11px;font-weight:600;font-family:var(--font);cursor:pointer;padding:6px 8px;border-radius:8px;display:inline-flex;align-items:center;gap:4px;min-height:32px}
+.macts button:active{background:#E9E9E5}
+.macts .time{margin-left:auto;color:#B9B9B4}
+.pickrow{display:flex;gap:8px;overflow-x:auto;margin:10px -14px -4px;padding:0 14px 4px;scrollbar-width:none}
 .pickrow::-webkit-scrollbar{display:none}
-.pick{flex-shrink:0;width:132px;background:rgba(255,255,255,.09);border-radius:14px;overflow:hidden;cursor:pointer;text-align:left;border:none;padding:0;font-family:var(--font);color:#fff}
+.pick{flex-shrink:0;width:132px;background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden;cursor:pointer;text-align:left;padding:0;font-family:var(--font);color:var(--ink)}
 .pick img{width:100%;height:110px;object-fit:cover;display:block}
 .pick div,.pick .pi{padding:8px 10px;font-size:11.5px;display:block}
-.pick b{color:#8FE388}
-.pick span{color:rgba(255,255,255,.65);display:block;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.minioutfit{margin-top:10px;background:rgba(255,255,255,.09);border-radius:14px;padding:12px;cursor:pointer}
+.pick b{color:var(--green)}
+.pick span{color:var(--muted);display:block;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.minioutfit{margin-top:10px;background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px;cursor:pointer}
 .minioutfit .coll{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
 .minioutfit img{width:100%;height:64px;object-fit:cover;border-radius:9px;display:block}
 .minioutfit .t{font-size:13px;font-weight:600;margin-top:8px;display:flex;justify-content:space-between}
-.minioutfit .t b{color:#8FE388}
+.minioutfit .t b{color:var(--green)}
 .qchips{display:flex;gap:8px;overflow-x:auto;margin-top:12px;scrollbar-width:none;padding-bottom:2px}
 .qchips::-webkit-scrollbar{display:none}
-.qchips button{flex-shrink:0;background:rgba(255,255,255,.09);color:#fff;border:none;border-radius:100px;padding:10px 15px;font-size:13px;font-weight:500;font-family:var(--font);cursor:pointer;min-height:40px}
-.aibar{display:flex;gap:8px;margin-top:12px}
-.aibar input{flex:1;background:rgba(255,255,255,.1);border:none;border-radius:100px;padding:14px 18px;color:#fff;font-family:var(--font);font-size:15px;outline:none;min-height:50px}
-.aibar input::placeholder{color:rgba(255,255,255,.45)}
-.aibar button{width:50px;height:50px;border-radius:50%;background:#8FE388;border:none;color:#0c1a12;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.qchips button{flex-shrink:0;background:#EFEFEC;color:var(--ink);border:none;border-radius:100px;padding:10px 15px;font-size:13px;font-weight:500;font-family:var(--font);cursor:pointer;min-height:40px}
+.aibar{display:flex;gap:8px;margin-top:12px;align-items:flex-end}
+.aibar textarea{flex:1;background:#EFEFEC;border:none;border-radius:22px;padding:14px 18px;color:var(--ink);font-family:var(--font);font-size:15px;outline:none;resize:none;max-height:120px;line-height:1.4}
+.aibar button{width:50px;height:50px;border-radius:50%;background:var(--green);border:none;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.aibar button:active{transform:scale(.94)}
 
 /* feed */
 .sect{display:flex;align-items:baseline;justify-content:space-between;margin:26px 0 12px}
