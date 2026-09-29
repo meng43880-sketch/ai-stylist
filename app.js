@@ -44,9 +44,15 @@ const Api = {
     const c = new AbortController();
     const t = setTimeout(() => c.abort(), ms || 15000);
     try {
-      const r = await fetch(path, Object.assign({ headers: { 'Content-Type': 'application/json' }, signal: c.signal }, opts || {}));
+      const headers = { 'Content-Type': 'application/json' };
+      try { if (typeof S !== 'undefined' && S.token) headers.Authorization = 'Bearer ' + S.token; } catch (e) {}
+      const r = await fetch(path, Object.assign({ headers, signal: c.signal }, opts || {}));
       const j = await r.json();
-      if (!r.ok || !j.ok) { const e = new Error((j && j.error) || ('HTTP ' + r.status)); e.code = (j && j.code) || 'ERR'; throw e; }
+      if (!r.ok || !j.ok) {
+        const e = new Error((j && j.error) || ('HTTP ' + r.status)); e.code = (j && j.code) || 'ERR'; e.status = r.status;
+        if (e.code === 'AUTH_REQUIRED' && window.__on401) window.__on401();
+        throw e;
+      }
       return j;
     } finally { clearTimeout(t); }
   },
@@ -138,23 +144,32 @@ let S = {
   feed: { title: 'Для тебя', items: [], total: 0 },
   feedOutfits: [], gapItems: [], wardrobe: { items: [], insights: null },
   ctx: { season: 'autumn', weather: null },
-  ob: { styles: ['smart', 'minimal'] }
+  ob: { styles: ['smart', 'minimal'] },
+  token: null, login: '', authMode: 'login', authErr: ''
 };
 try {
   const raw = localStorage.getItem(LS);
   if (raw) { const p = JSON.parse(raw); if (p) S = Object.assign(S, p); }
 } catch (e) {}
-S.route = S.done ? 'home' : 'welcome'; S.params = {};
+S.route = (S.done && S.token) ? 'home' : 'welcome'; S.params = {};
 function save() {
-  try { localStorage.setItem(LS, JSON.stringify({ profile: S.profile, photo: S.photo, aiNote: S.aiNote, done: S.done, favorites: S.favorites, savedOutfits: S.savedOutfits, chat: S.chat.slice(-30), cid: S.cid, ob: S.ob })); } catch (e) {}
+  try { localStorage.setItem(LS, JSON.stringify({ profile: S.profile, photo: S.photo, aiNote: S.aiNote, done: S.done, favorites: S.favorites, savedOutfits: S.savedOutfits, chat: S.chat.slice(-30), cid: S.cid, ob: S.ob, token: S.token, login: S.login })); } catch (e) {}
 }
 
 /* ---------- router ---------- */
-function go(route, params) { S.route = route; S.params = params || {}; render(); const a = $('#app'); if (a) a.scrollTop = 0; }
+const NEED_AUTH = ['home', 'results', 'product', 'outfit', 'outfits', 'favorites', 'profile', 'wardrobe'];
+function go(route, params) {
+  if (!S.token && NEED_AUTH.includes(route)) { route = 'auth'; params = {}; }
+  S.route = route; S.params = params || {}; render(); const a = $('#app'); if (a) a.scrollTop = 0;
+}
 window.go = go;
+window.__on401 = function () {
+  S.token = null; save();
+  if (NEED_AUTH.includes(S.route)) go('auth');
+};
 const TABS = [['home', 'Главная', 'home'], ['outfits', 'Образы', 'shirt'], ['favorites', 'Сохранённое', 'heart'], ['profile', 'Профиль', 'user']];
 function render() {
-  const v = { welcome: vWelcome, photo: vPhoto, params: vParams, style: vStyle, analyzing: vAnalyzing, home: vHome, results: vResults, product: () => vProduct(S.params.id), outfit: () => vOutfit(S.params.id), outfits: vOutfits, favorites: vFav, profile: vProfile, wardrobe: vWardrobe, privacy: vPrivacy }[S.route] || vWelcome;
+  const v = { welcome: vWelcome, auth: vAuth, photo: vPhoto, params: vParams, style: vStyle, analyzing: vAnalyzing, home: vHome, results: vResults, product: () => vProduct(S.params.id), outfit: () => vOutfit(S.params.id), outfits: vOutfits, favorites: vFav, profile: vProfile, wardrobe: vWardrobe, privacy: vPrivacy }[S.route] || vWelcome;
   $('#app').innerHTML = `<div class="screen">${v()}</div>`;
   const main = ['home', 'outfits', 'favorites', 'profile'].includes(S.route);
   const tabs = $('#tabs');
@@ -174,10 +189,70 @@ function vWelcome() {
     <p class="sub">Подберём вещи и соберём образы под твою внешность, вкус и бюджет.</p>
     <div class="shot">${IM(HERO, 'Стильный образ')}</div>
     <div class="grow"></div>
-    <button class="btn" onclick="go('photo')">Начать</button>
+    <button class="btn" onclick="enterApp()">Начать</button>
     <div class="foot">1 минута · Фото · Параметры · Подборка</div>
   </div>`;
 }
+window.enterApp = function () {
+  if (S.token) go(S.done ? 'home' : 'photo');
+  else go('auth');
+};
+/* ---------- auth: логин и пароль ---------- */
+function vAuth() {
+  const reg = S.authMode === 'register';
+  return `<div class="wrap" style="padding-top:64px">
+    <span class="pill">AI-стилист</span>
+    <h1 class="title" style="margin-top:16px">${reg ? 'Создать аккаунт' : 'С возвращением'}</h1>
+    <p class="sub">${reg ? 'Логин и пароль — вещи, лента и вкусы привяжутся к тебе.' : 'Войди, чтобы продолжить с того же места.'}</p>
+    <div class="chips" style="margin-top:16px"><button class="chip ${!reg ? 'on' : ''}" onclick="authTab('login')">Вход</button><button class="chip ${reg ? 'on' : ''}" onclick="authTab('register')">Регистрация</button></div>
+    <div class="field"><label>Логин · латиница, цифры, _</label><input class="input" id="a_login" autocomplete="username" value="${esc(S.login || '')}" maxlength="20"></div>
+    <div class="field"><label>Пароль · минимум 6 символов</label><input class="input" id="a_pass" type="password" autocomplete="${reg ? 'new-password' : 'current-password'}"></div>
+    ${S.authErr ? `<div class="note" style="background:#FDECEA;color:#8f1d12">${esc(S.authErr)}</div>` : ''}
+    <div style="height:16px"></div>
+    <button class="btn" onclick="authSubmit()">${reg ? 'Зарегистрироваться' : 'Войти'}</button>
+    <div style="height:22px"></div></div>`;
+}
+window.authTab = function (m) { S.authMode = m; S.authErr = ''; render(); };
+window.authSubmit = async function () {
+  const login = (($('#a_login') || {}).value || '').trim();
+  const pass = (($('#a_pass') || {}).value || '');
+  if (!/^[a-zA-Z0-9_]{3,20}$/.test(login)) { S.authErr = 'Логин: 3–20 символов, латиница, цифры и _'; render(); return; }
+  if (pass.length < 6) { S.authErr = 'Пароль: минимум 6 символов'; render(); return; }
+  S.authErr = ''; render();
+  try {
+    const r = await Api.post(S.authMode === 'register' ? '/api/auth/register' : '/api/auth/login', { login, password: pass });
+    S.token = r.token; S.login = r.login; save();
+    if (S.authMode === 'register') { S.done = false; save(); go('photo'); }
+    else await afterLogin();
+  } catch (e) { S.authErr = e.message || 'Не получилось. Попробуй ещё раз.'; render(); }
+};
+async function pullServer() {
+  try {
+    const r = await Api.get('/api/profile');
+    if (r.profile) { S.profile = r.profile; S.done = true; }
+    try { const f = await Api.get('/api/favorites'); S.favorites = f.favorites || []; } catch (e) {}
+    try { const w = await Api.get('/api/wardrobe'); S.wardrobe = { items: w.items || [], insights: w.insights || null }; } catch (e) {}
+    save();
+  } catch (e) {}
+}
+async function pushLocal() {
+  try { await Api.post('/api/profile', { profile: S.profile }); } catch (e) {}
+  try {
+    const f = await Api.get('/api/favorites');
+    if (!(f.favorites || []).length) for (const id of S.favorites) { try { await Api.post('/api/favorites', { productId: id }); } catch (e) {} }
+    const w = await Api.get('/api/wardrobe');
+    if (!(w.items || []).length) for (const it of (S.wardrobe.items || [])) { try { await Api.post('/api/wardrobe', { item: { title: it.title, cat: it.cat, colors: it.colors, styles: it.styles } }); } catch (e) {} }
+  } catch (e) {}
+}
+async function afterLogin() {
+  await pullServer();
+  await pushLocal();
+  go(S.done && S.profile ? 'home' : 'photo');
+}
+window.logout = async function () {
+  try { await Api.post('/api/auth/logout', { token: S.token }); } catch (e) {}
+  S.token = null; S.login = ''; save(); go('auth');
+};
 function vPhoto() {
   return `<div class="wrap">${dots(1)}
     <h1 class="title">Покажи себя</h1><p class="sub">AI посмотрит на фото один раз — и дальше будет подбирать точнее.</p>
@@ -837,15 +912,32 @@ function vProfile() {
     <button class="menurow" onclick="go('params')">${ic('sliders', 19)}<span>Мои параметры<small>Рост, размеры</small></span>${ic('chevR', 16)}</button>
     <button class="menurow" onclick="go('outfits')">${ic('shirt', 19)}<span>Мои образы<small>${S.savedOutfits.length} сохранено</small></span>${ic('chevR', 16)}</button>
     <button class="menurow" onclick="go('privacy')">${ic('info', 19)}<span>Конфиденциальность<small>Что храним и зачем</small></span>${ic('chevR', 16)}</button>
+    <button class="menurow" onclick="logout()">${ic('user', 19)}<span>Выйти<small>${esc(S.login || 'аккаунт')}</small></span>${ic('chevR', 16)}</button>
     <button class="menurow" onclick="wipe()">${ic('trash', 19)}<span>Удалить мои данные<small>Фото, профиль, история</small></span>${ic('chevR', 16)}</button>
     <div style="height:20px"></div></div>`;
 }
 window.wipe = async function () {
   if (!confirm('Удалить все мои данные? Фото, профиль, гардероб и история исчезнут безвозвратно.')) return;  try { await Api.req('/api/profile', { method: 'DELETE' }); } catch (e) {}
+  try { await Api.post('/api/auth/logout', { token: S.token }); } catch (e) {}
   localStorage.removeItem(LS);
-  S = Object.assign(S, { profile: S.profile, done: false, photo: null, favorites: [], savedOutfits: [], chat: [], wardrobe: { items: [], insights: null }, gapItems: [], feed: { title: 'Для тебя', items: [], total: 0 } });
+  try { localStorage.removeItem('stylist_v3_w'); } catch (e) {}
+  const tok = null;
+  S = defaultStateFresh();
   save(); go('welcome');
 };
+function defaultStateFresh() {
+  return {
+    route: 'welcome', params: {},
+    profile: JSON.parse(JSON.stringify(DEFAULT_PROFILE)),
+    photo: null, aiNote: '', done: false,
+    favorites: [], savedOutfits: [], chat: [], cid: null,
+    feed: { title: 'Для тебя', items: [], total: 0 },
+    feedOutfits: [], gapItems: [], wardrobe: { items: [], insights: null },
+    ctx: { season: 'autumn', weather: null },
+    ob: { styles: ['smart', 'minimal'] },
+    token: tok, login: '', authMode: 'login', authErr: ''
+  };
+}
 
 /* route side-effects */
 const __render = render;

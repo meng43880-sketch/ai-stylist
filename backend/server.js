@@ -6,12 +6,13 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const { CFG } = require('./lib/config');
-const { db, save, logHistory, getCache, setCache } = require('./lib/store');
+const { db, save, logHistory, getCache, setCache, UD } = require('./lib/store');
 const Q = require('./lib/qwen');
 const C = require('./lib/catalog');
 const R = require('./lib/recommend');
 const O = require('./lib/orchestrator');
 const M = require('./lib/market');
+const A = require('./lib/auth');
 
 const ROOT = path.join(__dirname, '..');
 const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.json': 'application/json; charset=utf-8' };
@@ -40,12 +41,22 @@ function readBody(req) {
   });
 }
 function userError(e) {
-  const map = { TIMEOUT: 'AI долго отвечает. Показываем сохранённые рекомендации.', RATE_LIMIT: 'Слишком много запросов. Подожди минуту.', AUTH: 'AI временно недоступен. Показываем сохранённые рекомендации.', UNAVAILABLE: 'Не удалось обновить AI-рекомендации. Показываем сохранённые рекомендации.', NO_SOURCE: e.message, NOT_FOUND: 'Не найдено', BAD_REQUEST: e.message, TOO_LARGE: e.message, BAD_IMAGE: e.message };
+  const map = { TIMEOUT: 'AI долго отвечает. Показываем сохранённые рекомендации.', RATE_LIMIT: 'Слишком много запросов. Подожди минуту.', AUTH: e.message, AUTH_REQUIRED: 'Войди или зарегистрируйся — сессия истекла.', NO_FUNDS: e.message, UNAVAILABLE: 'Не удалось обновить AI-рекомендации. Показываем сохранённые рекомендации.', NO_SOURCE: e.message, NOT_FOUND: 'Не найдено', BAD_REQUEST: e.message, TOO_LARGE: e.message, BAD_IMAGE: e.message };
   return map[e.code] || 'Что-то пошло не так. Попробуй ещё раз.';
 }
 const DEFAULT_PROFILE = { name: 'Артём', height: 190, weight: 85, gender: 'male', topSize: 'L', pantsSize: '32', shoeSize: '43', build: 'athletic', styles: ['smart', 'minimal'], budget: 5000, colors: ['black', 'white', 'olive', 'beige'], categories: ['top', 'bottom', 'shoes'] };
-function profile() { return db.profile || DEFAULT_PROFILE; }
-function feedback() { return db.feedback || { likes: {}, dislikes: {}, styleW: {}, colorW: {} }; }
+function profile(U) { return (U && U.profile) || DEFAULT_PROFILE; }
+function feedback(U) { return (U && U.feedback) || { likes: {}, dislikes: {}, styleW: {}, colorW: {} }; }
+/* Токен из Authorization: Bearer. Бросает 401 без валидной сессии. */
+function authUid(req) {
+  const h = req.headers.authorization || '';
+  const t = h.startsWith('Bearer ') ? h.slice(7).trim() : '';
+  const u = A.getUserByToken(t);
+  if (!u) { const e = Q.err('AUTH_REQUIRED', 'need auth', 401); throw e; }
+  return u.id;
+}
+/* Публичные ручки (без токена). Всё остальное /api — только со входом. */
+const PUBLIC_API = ['/api/status', '/api/context', '/api/market/wb/search', '/api/market/ozon/search', '/api/market/link'];
 
 async function route(req, res) {
   const url = new URL(req.url, 'http://x');
@@ -55,7 +66,7 @@ async function route(req, res) {
   console.log(new Date().toISOString(), m, p);
 
   /* --- static frontend --- */
-  if (m === 'GET' && (p === '/' || p === '/index.html' || p === '/styles.css' || p === '/app.js')) {
+  if (m === 'GET' && (p === '/' || p === '/index.html' || p === '/styles.css' || p === '/app.js' || p === '/demo.js')) {
     const f = p === '/' ? '/index.html' : p;
     const fp = path.join(ROOT, f);
     if (!fp.startsWith(ROOT)) return send(res, 403, { ok: false });
@@ -68,14 +79,33 @@ async function route(req, res) {
   if (!p.startsWith('/api/')) return send(res, 404, { ok: false, error: 'Не найдено' });
 
   try {
+    /* --- auth (публично) --- */
+    if (p === '/api/auth/register' && m === 'POST') {
+      const b = await readBody(req);
+      const token = A.register(b.login, b.password);
+      return send(res, 200, { ok: true, token, login: String(b.login).toLowerCase() });
+    }
+    if (p === '/api/auth/login' && m === 'POST') {
+      const b = await readBody(req);
+      const out = A.login(b.login, b.password);
+      return send(res, 200, { ok: true, token: out.token, login: out.login });
+    }
+    if (p === '/api/auth/logout' && m === 'POST') {
+      const b = await readBody(req);
+      A.logout(b.token || '');
+      return send(res, 200, { ok: true });
+    }
     /* --- status / context --- */
     if (m === 'GET' && p === '/api/status') return send(res, 200, { ok: true, aiMode: CFG.aiMode, demoMode: CFG.demoMode, dataSource: CFG.dataSource, season: R.currentSeason(), usage: db.usage || {}, providers: { vision: Q.isConfigured(CFG.qwen.vision), stylist: Q.isConfigured(CFG.qwen.stylist), product: Q.isConfigured(CFG.qwen.product) } });
     if (m === 'GET' && p === '/api/context') {
       const w = await O.getWeather();
       return send(res, 200, { ok: true, season: R.currentSeason(), weather: w });
     }
+    const isPublic = p.startsWith('/api/auth/') || PUBLIC_API.includes(p) || p === '/api/status' || p === '/api/context';
+    const uid = isPublic ? null : authUid(req);
+    const U = uid ? UD(uid) : null;
     /* --- profile --- */
-    if (m === 'GET' && p === '/api/profile') return send(res, 200, { ok: true, profile: profile(), vision: db.vision || null });
+    if (m === 'GET' && p === '/api/profile') return send(res, 200, { ok: true, profile: profile(U), vision: U.vision || null });
     if (m === 'PUT' && p === '/api/profile') {
       const b = await readBody(req);
       const v = b.profile || {};
@@ -90,26 +120,26 @@ async function route(req, res) {
         budget: Math.max(500, Math.min(500000, parseInt(v.budget) || 5000)),
         colors: Array.isArray(v.colors) ? v.colors.filter((c) => R.COLOR_RU[c]).slice(0, 8) : []
       };
-      db.profile = clean; save(); logHistory('profile', 'Профиль обновлён');
+      U.profile = clean; save(); logHistory('profile', 'Профиль обновлён', uid);
       return send(res, 200, { ok: true, profile: clean });
     }
     if (m === 'DELETE' && p === '/api/profile') {
-      db.profile = null; db.vision = null; db.favorites = []; db.outfits = []; db.wardrobe = []; db.history = []; db.chats = {};
-      db.feedback = { likes: {}, dislikes: {}, styleW: {}, colorW: {} };
+      const fresh = { profile: null, vision: null, favorites: [], outfits: [], wardrobe: [], feedback: { likes: {}, dislikes: {}, styleW: {}, colorW: {} }, history: [], chats: {} };
+      Object.keys(fresh).forEach((k) => { U[k] = fresh[k]; });
       save(); return send(res, 200, { ok: true });
     }
     /* --- vision --- */
     if (m === 'POST' && p === '/api/analyze-photo') {
       const b = await readBody(req);
-      const out = await O.analyzePhoto({ image: b.image, profile: profile() });
-      db.vision = out; save(); logHistory('ai', 'Vision-профиль создан');
+      const out = await O.analyzePhoto({ image: b.image, profile: profile(U) });
+      U.vision = out; save(); logHistory('ai', 'Vision-профиль создан', uid);
       return send(res, 200, { ok: true, vision: out });
     }
     /* --- search / recommendations --- */
     if (m === 'POST' && (p === '/api/search' || p === '/api/recommendations')) {
       const b = await readBody(req);
       const struct = b.struct || R.nlParse(b.query || '');
-      const pipe = await O.searchPipeline({ struct, text: b.query || '', profile: profile(), feedback: feedback(), limit: b.limit || 20 });
+      const pipe = await O.searchPipeline({ struct, text: b.query || '', profile: profile(U), feedback: feedback(U), limit: b.limit || 20, wardrobe: U.wardrobe });
       const key = JSON.stringify(struct);
       require('./lib/store').setCache('recs', key, { items: pipe.items.map((x) => x.id), ts: Date.now() });
       return send(res, 200, { ok: true, total: pipe.total, items: pipe.items, source: pipe.source });
@@ -117,8 +147,8 @@ async function route(req, res) {
     /* --- outfits --- */
     if (m === 'POST' && p === '/api/outfits') {
       const b = await readBody(req);
-      const pipe = await O.searchPipeline({ struct: {}, profile: profile(), feedback: feedback(), limit: 24 });
-      const outs = R.buildOutfits(pipe.items, profile(), b.count || 3).map((o) => Object.assign({}, o, {
+      const pipe = await O.searchPipeline({ struct: {}, profile: profile(U), feedback: feedback(U), limit: 24, wardrobe: U.wardrobe });
+      const outs = R.buildOutfits(pipe.items, profile(U), b.count || 3).map((o) => Object.assign({}, o, {
         items: o.items.map((id) => pipe.items.find((x) => x.id === id)).filter(Boolean),
         why: ['соответствует твоему стилю', 'подходит по цветам', 'подходит по параметрам', 'соответствует сезону', 'укладывается в бюджет']
       }));
@@ -128,7 +158,7 @@ async function route(req, res) {
     const pm = p.match(/^\/api\/products\/([a-z0-9]+)(\/reviews|\/analysis|\/explanation|\/availability)?$/i);
     if (m === 'GET' && pm) {
       const prod = C.DemoProductProvider.getById(pm[1]);
-      if (pm[2] === '/explanation') return send(res, 200, { ok: true, data: await O.explainProduct(pm[1], null) });
+      if (pm[2] === '/explanation') return send(res, 200, { ok: true, data: await O.explainProduct(pm[1], null, uid) });
       if (pm[2] === '/availability') {
         const service = new M.MarketplaceService();
         const av = await service.getAvailability(pm[1]);
@@ -138,7 +168,7 @@ async function route(req, res) {
       if (!prod) return send(res, 404, { ok: false, error: 'Товар не найден' });
       if (pm[2] === '/reviews') return send(res, 200, { ok: true, data: C.getReviews(pm[1]) });
       if (pm[2] === '/analysis') return send(res, 200, { ok: true, data: await O.productAnalysis(pm[1]) });
-      const r = R.scoreProduct(prod, O.scoreCtx(profile(), feedback()));
+      const r = R.scoreProduct(prod, O.scoreCtx(profile(U), feedback(U), { wardrobe: U.wardrobe }));
       return send(res, 200, { ok: true, product: Object.assign({}, prod, { aiScore: r.score, aiParts: r.parts, url: C.mpSearchUrl(prod) }) });
     }
     if (m === 'POST' && p === '/api/product-analysis') {
@@ -147,35 +177,37 @@ async function route(req, res) {
     }
     if (m === 'POST' && p === '/api/products/explanation') {
       const b = await readBody(req);
-      return send(res, 200, { ok: true, data: await O.explainProduct(b.productId, b.product || null) });
+      return send(res, 200, { ok: true, data: await O.explainProduct(b.productId, b.product || null, uid) });
     }
     /* --- chat --- */
     if (m === 'POST' && p === '/api/ai/chat') {
       const b = await readBody(req);
-      const out = await O.chat({ message: b.message, conversationId: b.conversationId, profile: profile(), feedback: feedback() });
+      const out = await O.chat({ message: b.message, conversationId: b.conversationId, profile: profile(U), feedback: feedback(U), uid, wardrobe: U.wardrobe });
       return send(res, 200, { ok: true, data: out });
     }
     /* --- feedback / favorites / history --- */
     if (m === 'POST' && p === '/api/feedback') {
       const b = await readBody(req);
       const { productId, kind, reason } = b;
+      const FB = feedback(U);
       if (kind === 'like') {
-        feedback().likes[productId] = true; delete feedback().dislikes[productId];
+        FB.likes[productId] = true; delete FB.dislikes[productId];
         const pr = C.DemoProductProvider.getById(productId);
-        if (pr) { pr.styles.forEach((s) => { feedback().styleW[s] = (feedback().styleW[s] || 0) + 0.05; }); pr.colors.forEach((c) => { feedback().colorW[c] = (feedback().colorW[c] || 0) + 0.05; }); }
+        if (pr) { pr.styles.forEach((s) => { FB.styleW[s] = (FB.styleW[s] || 0) + 0.05; }); pr.colors.forEach((c) => { FB.colorW[c] = (FB.colorW[c] || 0) + 0.05; }); }
       } else {
-        feedback().dislikes[productId] = reason || 'dislike'; delete feedback().likes[productId];
+        FB.dislikes[productId] = reason || 'dislike'; delete FB.likes[productId];
       }
-      save(); logHistory('feedback', `${kind}: ${productId}`);
+      U.feedback = FB;
+      save(); logHistory('feedback', `${kind}: ${productId}`, uid);
       return send(res, 200, { ok: true });
     }
-    if (m === 'GET' && p === '/api/favorites') return send(res, 200, { ok: true, favorites: db.favorites });    if (m === 'POST' && p === '/api/favorites') {
+    if (m === 'GET' && p === '/api/favorites') return send(res, 200, { ok: true, favorites: U.favorites });    if (m === 'POST' && p === '/api/favorites') {
       const b = await readBody(req);
-      if (b.action === 'remove') db.favorites = db.favorites.filter((x) => x !== b.productId);
-      else if (b.productId && !db.favorites.includes(b.productId)) db.favorites.push(b.productId);
-      save(); return send(res, 200, { ok: true, favorites: db.favorites });
+      if (b.action === 'remove') U.favorites = U.favorites.filter((x) => x !== b.productId);
+      else if (b.productId && !U.favorites.includes(b.productId)) U.favorites.push(b.productId);
+      save(); return send(res, 200, { ok: true, favorites: U.favorites });
     }
-    if (m === 'GET' && p === '/api/history') return send(res, 200, { ok: true, history: db.history.slice(0, 50) });
+    if (m === 'GET' && p === '/api/history') return send(res, 200, { ok: true, history: U.history.slice(0, 50) });
     /* --- market: живые данные --- */
     if (m === 'GET' && p === '/api/market/wb/search') {
       const q = String(url.searchParams.get('q') || '').slice(0, 80);
@@ -196,7 +228,7 @@ async function route(req, res) {
       const b = await readBody(req);
       const items = Array.isArray(b.items) ? b.items.slice(0, 100) : [];
       const struct = b.struct || {};
-      const scored = M.scoreLive(items, O.scoreCtx(profile(), feedback(), { occasion: struct.occasion }));
+      const scored = M.scoreLive(items, O.scoreCtx(profile(U), feedback(U), { occasion: struct.occasion, wardrobe: U.wardrobe }));
       return send(res, 200, { ok: true, items: scored });
     }
     /* Партнёрская обёртка ссылки: frontend зовёт перед открытием магазина. */
@@ -208,8 +240,7 @@ async function route(req, res) {
     }
     /* --- wardrobe: вещи пользователя + AI-оценка вкуса --- */
     if (m === 'GET' && p === '/api/wardrobe') {
-      db.wardrobe = db.wardrobe || [];
-      return send(res, 200, { ok: true, items: db.wardrobe, insights: R.wardrobeInsights(db.wardrobe) });
+      return send(res, 200, { ok: true, items: U.wardrobe, insights: R.wardrobeInsights(U.wardrobe) });
     }
     if (m === 'POST' && p === '/api/wardrobe') {
       const b = await readBody(req);
@@ -227,15 +258,14 @@ async function route(req, res) {
         photo: (typeof v.photo === 'string' && v.photo.startsWith('data:image/') && v.photo.length <= 600000) ? v.photo : null,
         addedAt: Date.now()
       };
-      db.wardrobe = db.wardrobe || [];
-      db.wardrobe.unshift(item);
-      save(); logHistory('wardrobe', 'В гардероб: ' + title);
-      return send(res, 200, { ok: true, item, insights: R.wardrobeInsights(db.wardrobe) });
+      U.wardrobe.unshift(item);
+      save(); logHistory('wardrobe', 'В гардероб: ' + title, uid);
+      return send(res, 200, { ok: true, item, insights: R.wardrobeInsights(U.wardrobe) });
     }
     if (m === 'DELETE' && p === '/api/wardrobe') {
       const b = await readBody(req);
-      db.wardrobe = (db.wardrobe || []).filter((x) => x.id !== b.id);
-      save(); return send(res, 200, { ok: true, insights: R.wardrobeInsights(db.wardrobe) });
+      U.wardrobe = (U.wardrobe || []).filter((x) => x.id !== b.id);
+      save(); return send(res, 200, { ok: true, insights: R.wardrobeInsights(U.wardrobe) });
     }
     return send(res, 404, { ok: false, error: 'Не найдено' });
   } catch (e) {

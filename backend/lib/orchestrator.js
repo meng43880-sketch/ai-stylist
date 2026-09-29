@@ -182,19 +182,19 @@ function activeCatalog(struct) {
 function scoreCtx(profile, feedback, extra) {
   return Object.assign({
     profile, feedback: feedback || { likes: {}, dislikes: {}, styleW: {}, colorW: {} },
-    season: R.currentSeason(), occasion: '', analyses: {}, wardrobe: db.wardrobe || []
+    season: R.currentSeason(), occasion: '', analyses: {}, wardrobe: []
   }, extra || {});
 }
 /* ---------- SEARCH PIPELINE (cost control) ----------
    Воронка: веер запросов × страницы (до ~180 кандидатов) → код-фильтры →
    скоринг → топ-30 → AI#3 только по новичкам без кеша (макс. 8) → топ-20.
    AI никогда не видит сотни товаров. */
-async function searchPipeline({ struct, text, profile, feedback, limit }) {
+async function searchPipeline({ struct, text, profile, feedback, limit, wardrobe }) {
   // Демо-каталог выключен по умолчанию: только живьё + пустота, без выдумок.
   let list = CFG.demoCatalog ? activeCatalog(struct) : [];
   const total = list.length;
   list = list.slice(0, 500);
-  const top = R.rankProducts(list, scoreCtx(profile, feedback, { occasion: struct && struct.occasion }));
+  const top = R.rankProducts(list, scoreCtx(profile, feedback, { occasion: struct && struct.occasion, wardrobe: wardrobe || [] }));
   let cands = top.slice(0, limit || 20);
   // Обогащаем топ кешированными демо-анализами (без AI-вызовов в демо-режиме)
   const analyses = {};
@@ -206,7 +206,7 @@ async function searchPipeline({ struct, text, profile, feedback, limit }) {
       const queries = (text && text.trim()) ? [text.trim()] : M.structToQueries(struct || {});
       const live = await M.funnelSearch(queries, 50, 2);
       if (live.length) {
-        const ctx = scoreCtx(profile, feedback, { occasion: struct && struct.occasion });
+        const ctx = scoreCtx(profile, feedback, { occasion: struct && struct.occasion, wardrobe: wardrobe || [] });
         const scored = M.scoreLive(live, ctx).slice(0, 50);
         const fresh = await ensureLiveAnalyses(scored);
         Object.assign(analyses, fresh);
@@ -252,28 +252,31 @@ function demoBrain(message, profile, ctx) {
   else reply = `Подберу варианты в пределах твоего бюджета. Уточни, если нужно: категория, цвет или повод — например «брюки на выход».` + (wr ? ' Заодно сверюсь с твоим гардеробом.' : '');
   return { intent: hasQ || parsed.occasion ? 'find_products' : 'chat', searchCriteria: parsed, message: reply, source: 'demo' };
 }
-async function chat({ message, conversationId, profile, feedback }) {
+async function chat({ message, conversationId, profile, feedback, uid, wardrobe }) {
   const msg = String(message || '').slice(0, 500);
   if (!msg.trim()) throw Q.err('BAD_REQUEST', 'Пустое сообщение', 400);
   const cid = conversationId || ('c' + Date.now());
-  db.chats[cid] = db.chats[cid] || [];
-  db.chats[cid].push({ role: 'user', text: msg, t: Date.now() });  const weather = await getWeather();
-  const ctx = { weather, season: R.currentSeason(), wardrobe: db.wardrobe || [] };
+  const store = require('./store');
+  const chats = uid ? store.UD(uid).chats : {};
+  const wr = wardrobe || (uid ? store.UD(uid).wardrobe : []) || [];
+  chats[cid] = chats[cid] || [];
+  chats[cid].push({ role: 'user', text: msg, t: Date.now() });  const weather = await getWeather();
+  const ctx = { weather, season: R.currentSeason(), wardrobe: wr };
   let out;
   if (!Q.isConfigured(CFG.qwen.stylist)) {
     const d = demoBrain(msg, profile, ctx);
-    const pipe = await searchPipeline({ struct: d.searchCriteria, profile, feedback, limit: 50 });
+    const pipe = await searchPipeline({ struct: d.searchCriteria, profile, feedback, limit: 50, wardrobe: wr });
     out = Object.assign({}, d, { products: pipe.items, total: pipe.total, conversationId: cid, aiMode: 'demo' });
   } else {
     // Production: Main AI. При недоступности — тихий откат на demoBrain (§51).
     try {
-      const wrSum = (db.wardrobe || []).map((w) => `${w.title} (${w.cat}, ${(w.colors || []).join('/')})`).slice(0, 12).join('; ');
+      const wrSum = wr.map((w) => `${w.title} (${w.cat}, ${(w.colors || []).join('/')})`).slice(0, 12).join('; ');
       const sys = `You are an AI stylist. User: height ${profile.height}cm, weight ${profile.weight}kg, sizes ${profile.topSize}/${profile.pantsSize}/${profile.shoeSize}, budget ${profile.budget} RUB, styles ${(profile.styles || []).join(',')}, colors ${(profile.colors || []).join(',')}. Season ${ctx.season}, weather ${weather.temp != null ? weather.temp + 'C' : 'n/a'}. Wardrobe: ${wrSum || 'empty'} — prefer items matching it, fill gaps. Never ask what the profile already knows. Reply in Russian, max 2 short sentences. The message field is REQUIRED, never empty.`;
-      const hist = db.chats[cid].slice(-4).map((m) => ({ role: m.role === 'ai' ? 'assistant' : 'user', content: String(m.text).slice(0, 200) }));
+      const hist = chats[cid].slice(-4).map((m) => ({ role: m.role === 'ai' ? 'assistant' : 'user', content: String(m.text).slice(0, 200) }));
       const rawAnswer = await Q.chatJSON(CFG.qwen.stylist, { system: sys, user: msg + '\nHistory: ' + JSON.stringify(hist), required: [], tag: 'stylist', maxTokens: 350 });
       const answer = normalizeStylist(rawAnswer);
       const crit = Object.assign({ size: profile.topSize || '' }, answer.searchCriteria || {});
-      const pipe = await searchPipeline({ struct: crit, profile, feedback, limit: 50 });
+      const pipe = await searchPipeline({ struct: crit, profile, feedback, limit: 50, wardrobe: wr });
       let text = answer.message;
       if (!text) {
         const bits = [crit.category ? ({ top: 'верх', bottom: 'низ', shoes: 'обувь', acc: 'аксессуары' })[crit.category] : '', crit.color, crit.maxPrice ? 'до ' + Number(crit.maxPrice).toLocaleString('ru-RU') + ' ₽' : ''].filter(Boolean);
@@ -283,21 +286,22 @@ async function chat({ message, conversationId, profile, feedback }) {
     } catch (e) {
       if (e.code === 'BAD_JSON') throw e;
       const d = demoBrain(msg, profile, ctx);
-      const pipe = await searchPipeline({ struct: d.searchCriteria, profile, feedback, limit: 50 });
+      const pipe = await searchPipeline({ struct: d.searchCriteria, profile, feedback, limit: 50, wardrobe: wr });
       const prefix = e.code === 'NO_FUNDS' ? 'Баланс шлюза на нуле — пополни счёт, и отвечу по-настоящему. А пока: ' : '';
       out = Object.assign({}, d, { message: prefix + d.message, products: pipe.items, total: pipe.total, conversationId: cid, aiMode: 'demo-fallback' });
     }
   }
   if (!out.products.length) out.message += '\n\nЖивые товары WB сейчас недоступны с этой сети, а выдуманных мы не показываем. Попробуй с другого интернета.';
-  db.chats[cid].push({ role: 'ai', text: out.message, t: Date.now() });
-  db.chats[cid] = db.chats[cid].slice(-30);
+  chats[cid].push({ role: 'ai', text: out.message, t: Date.now() });
+  chats[cid] = chats[cid].slice(-30);
+  if (uid) { require('./store').UD(uid).chats = chats; }
   save();
   return out;
 }
 /* ---------- EXPLANATION (§10): детерминированное «почему подходит» ----------
    Оценки считает RecommendationEngine, не AI. Формулировки честные:
    предположения, а не «научные метрики». */
-async function explainProduct(productId, bodyProduct) {
+async function explainProduct(productId, bodyProduct, uid) {
   const service = new M.MarketplaceService();
   let p = bodyProduct || null;
   if (!p) {
@@ -308,9 +312,11 @@ async function explainProduct(productId, bodyProduct) {
     }
   } else p = M.toModel(p);
   if (!p) throw Q.err('NOT_FOUND', 'Товар не найден', 404);
-  const profile = db.profile || {};
-  const fb = db.feedback || { likes: {}, dislikes: {}, styleW: {}, colorW: {} };
-  const ctx = scoreCtx(profile, fb, {});
+  const store = require('./store');
+  const U = uid ? store.UD(uid) : { profile: null, feedback: null };
+  const profile = (U.profile) || {};
+  const fb = U.feedback || { likes: {}, dislikes: {}, styleW: {}, colorW: {} };
+  const ctx = scoreCtx(profile, fb, { wardrobe: (uid && U.wardrobe) || [] });
   const r = R.scoreProduct(Object.assign({ seasons: ['spring', 'summer', 'autumn', 'winter'] }, p), ctx);
   const scored = Object.assign({}, p, { aiScore: r.score, aiParts: r.parts });
   let analysis = null;
