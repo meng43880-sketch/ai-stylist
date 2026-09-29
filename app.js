@@ -154,7 +154,7 @@ function go(route, params) { S.route = route; S.params = params || {}; render();
 window.go = go;
 const TABS = [['home', 'Главная', 'home'], ['outfits', 'Образы', 'shirt'], ['favorites', 'Сохранённое', 'heart'], ['profile', 'Профиль', 'user']];
 function render() {
-  const v = { welcome: vWelcome, photo: vPhoto, params: vParams, style: vStyle, analyzing: vAnalyzing, home: vHome, results: vResults, product: () => vProduct(S.params.id), outfit: () => vOutfit(S.params.id), outfits: vOutfits, favorites: vFav, profile: vProfile, wardrobe: vWardrobe }[S.route] || vWelcome;
+  const v = { welcome: vWelcome, photo: vPhoto, params: vParams, style: vStyle, analyzing: vAnalyzing, home: vHome, results: vResults, product: () => vProduct(S.params.id), outfit: () => vOutfit(S.params.id), outfits: vOutfits, favorites: vFav, profile: vProfile, wardrobe: vWardrobe, privacy: vPrivacy }[S.route] || vWelcome;
   $('#app').innerHTML = `<div class="screen">${v()}</div>`;
   const main = ['home', 'outfits', 'favorites', 'profile'].includes(S.route);
   const tabs = $('#tabs');
@@ -791,6 +791,22 @@ window.wDel = async function (id) {
   } catch (e) { /* локально уже удалено */ }
 };
 
+/* ---------- privacy ---------- */
+function vPrivacy() {
+  return `<div class="wrap">
+    <div class="row"><button class="iconbtn" onclick="go('profile')" aria-label="Назад">${ic('back', 19)}</button>
+    <div class="grow"><h1 class="title" style="font-size:24px">Конфиденциальность</h1></div></div>
+    <div class="kv"><span>Профиль и параметры</span></div>
+    <p class="sub">Хранятся в твоём браузере и на сервере приложения только для подборок. Никому не передаются.</p>
+    <div class="kv"><span>Фотографии</span></div>
+    <p class="sub">Фото для анализа внешности отправляется AI-провайдеру один раз и кешируется. По запросу удалим всё: Профиль → «Удалить мои данные».</p>
+    <div class="kv"><span>Переходы в магазины</span></div>
+    <p class="sub">Кнопки «Купить» ведут на Wildberries и Ozon. Там действуют их собственные правила конфиденциальности.</p>
+    <div class="kv"><span>Реклама и трекинг</span></div>
+    <p class="sub">Не продаём данные, не ставим рекламных трекеров. Ссылки на магазины могут быть партнёрскими — это не меняет цену для тебя.</p>
+    <div style="height:20px"></div></div>`;
+}
+
 /* ---------- favorites / profile ---------- */
 function vFav() {
   return `<div class="wrap"><h1 class="title">Сохранённое</h1><p class="sub">AI учитывает это в следующих подборках.</p>
@@ -828,6 +844,7 @@ function vProfile() {
     <button class="menurow" onclick="go('wardrobe')">${ic('shirt', 19)}<span>Мой гардероб<small>${S.wardrobe.items.length ? S.wardrobe.items.length + ' вещей · AI учитывает вкус' : 'Добавь свои вещи — лента станет точнее'}</small></span>${ic('chevR', 16)}</button>
     <button class="menurow" onclick="go('params')">${ic('sliders', 19)}<span>Мои параметры<small>Рост, размеры, бюджет</small></span>${ic('chevR', 16)}</button>
     <button class="menurow" onclick="go('outfits')">${ic('shirt', 19)}<span>Мои образы<small>${S.savedOutfits.length} сохранено</small></span>${ic('chevR', 16)}</button>
+    <button class="menurow" onclick="go('privacy')">${ic('info', 19)}<span>Конфиденциальность<small>Что храним и зачем</small></span>${ic('chevR', 16)}</button>
     <button class="menurow" onclick="wipe()">${ic('trash', 19)}<span>Удалить мои данные<small>Фото, профиль, история</small></span>${ic('chevR', 16)}</button>
     <div style="height:20px"></div></div>`;
 }
