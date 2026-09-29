@@ -181,17 +181,19 @@ function render() {
 }
 
 /* ---------- onboarding ---------- */
-const HERO = 'https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?auto=format&fit=crop&w=800&q=80';
+const HERO = 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&w=900&q=80';
 function dots(n) { return `<div class="stepdot">${[1, 2, 3].map((i) => `<i class="${i <= n ? 'on' : ''}"></i>`).join('')}</div>`; }
 function vWelcome() {
-  return `<div class="w0 screen">
-    <span class="pill">AI-стилист</span>
-    <h1>Скажи,<br>что <em>надеть</em></h1>
-    <p class="sub">Подберём вещи и соберём образы под твою внешность, вкус и бюджет.</p>
-    <div class="shot">${IM(HERO, 'Стильный образ')}</div>
-    <div class="grow"></div>
-    <button class="btn" onclick="enterApp()">Начать</button>
-    <div class="foot">1 минута · Фото · Параметры · Подборка</div>
+  return `<div class="hero-full screen">
+    ${IM(HERO, 'AI-стилист')}
+    <div class="shade"></div>
+    <div class="top"><span class="pill">AI-стилист</span></div>
+    <div class="body">
+      <h1>Скажи,<br>что <em>надеть</em></h1>
+      <p>Подберём вещи и соберём образы под твою внешность, вкус и бюджет.</p>
+      <button class="btn light" onclick="enterApp()">Начать</button>
+      <div class="foot">1 минута · Фото · Параметры · Подборка</div>
+    </div>
   </div>`;
 }
 window.enterApp = function () {
