@@ -259,12 +259,9 @@ window.logout = async function () {
 function vPhoto() {
   return `<div class="wrap">${dots(1)}
     <h1 class="title">Покажи себя</h1><p class="sub">AI посмотрит на фото один раз — и дальше будет подбирать точнее.</p>
-    <div class="photoframe">${S.photo ? `${IM(S.photo, 'Фото')}` : `<div class="ph">${ic('camera', 40)}<p style="margin-top:10px">В полный рост, при хорошем свете</p></div>`}</div>
+    <label class="photoframe" style="cursor:pointer">${S.photo ? `${IM(S.photo, 'Фото')}` : `<span class="ph">${ic('camera', 40)}<span style="display:block;margin-top:10px">Нажми, чтобы добавить фото<br>В полный рост, при хорошем свете</span></span>`}<input type="file" accept="image/*" hidden onchange="onPhoto(event)"></label>
+    ${S.photo ? `<p class="sub" style="text-align:center">Нажми на фото, чтобы заменить</p>` : ''}
     <div style="height:14px"></div>
-    <div class="row">
-      <label class="btn secondary grow" style="margin:0">Фото<input type="file" accept="image/*" hidden onchange="onPhoto(event)"></label>
-    </div>
-    <div style="height:10px"></div>
     <button class="btn" onclick="go('params')">Дальше</button>
     <button class="link" style="width:100%;justify-content:center" onclick="S.photo=null;save();go('params')">Пропустить</button>
     <div style="height:24px"></div></div>`;
