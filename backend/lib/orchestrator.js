@@ -200,14 +200,14 @@ async function searchPipeline({ struct, text, profile, feedback, limit, wardrobe
   const analyses = {};
   cands.forEach((p) => { analyses[p.id] = C.demoAnalysis(C.DemoProductProvider.getById(p.id)); });
   let source = CFG.dataSource;
-  // hybrid: воронка живья WB (веер × страницы, до ~300) → топ-50.
+  // hybrid: воронка живья WB (веер × 1 страница, до ~50) → топ-50.
   if (CFG.dataSource === 'hybrid') {
     try {
       const queries = (text && text.trim()) ? [text.trim()] : M.structToQueries(struct || {});
-      const live = await M.funnelSearch(queries, 50, 2);
+      const live = await M.funnelSearch(queries, 25, 1);
       if (live.length) {
         const ctx = scoreCtx(profile, feedback, { occasion: struct && struct.occasion, wardrobe: wardrobe || [] });
-        const scored = M.scoreLive(live, ctx).slice(0, 50);
+        const scored = M.scoreLive(live.slice(0, 50), ctx).slice(0, 50);
         const fresh = await ensureLiveAnalyses(scored);
         Object.assign(analyses, fresh);
         const ids = new Set(scored.map((x) => x.id));

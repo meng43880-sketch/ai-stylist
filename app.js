@@ -119,7 +119,7 @@ const WBClient = {
     const c = new AbortController();
     const t = setTimeout(() => c.abort(), 15000);
     try {
-      const jobs = [1, 2, 3].map((page) => fetch(`https://search.wb.ru/exactmatch/ru/common/v18/search?ab_testing=false&appType=1&curr=rub&dest=-1257786&page=${page}&query=${q}&resultset=catalog&sort=popular&spp=30&suppressSpellcheck=false`, { signal: c.signal }).then((r) => { if (!r.ok) throw new Error('WB ' + r.status); return r.json(); }));
+      const jobs = [1, 2].map((page) => fetch(`https://search.wb.ru/exactmatch/ru/common/v18/search?ab_testing=false&appType=1&curr=rub&dest=-1257786&page=${page}&query=${q}&resultset=catalog&sort=popular&spp=25&suppressSpellcheck=false`, { signal: c.signal }).then((r) => { if (!r.ok) throw new Error('WB ' + r.status); return r.json(); }));
       const settled = await Promise.allSettled(jobs);
       let all = [];
       settled.forEach((s) => { if (s.status === 'fulfilled') all = all.concat(((s.value && s.value.data && s.value.data.products) || [])); });
@@ -128,7 +128,7 @@ const WBClient = {
         if (!p || seen.has(p.id)) return;
         seen.add(p.id); out.push(p);
       });
-      return out.slice(0, limit || 60);
+      return out.slice(0, limit || 50);
     } finally { clearTimeout(t); }
   }
 };
@@ -592,7 +592,7 @@ async function askAI(text, img) {
     /* Живьём с WB: прямой запрос из браузера + скоринг тем же движком.
        Для фото используем suggestQuery от вижена, а не текст кнопки. */
     try {
-      const raw = await WBClient.searchText(d.suggestQuery || text, 60);
+      const raw = await WBClient.searchText(d.suggestQuery || text, 50);
       if (raw.length) {
         const s = await Api.post('/api/market/score', { items: raw, struct: {} });
         (s.items || []).forEach((p) => { RC[p.id] = p; });
@@ -614,7 +614,7 @@ async function askAI(text, img) {
       /* На статике живьё с WB тоже работает (CORS открыт) — score считаем
          локально тем же движком, метка Live сохраняется. */
       try {
-        const raw = await WBClient.searchText(text, 30);
+        const raw = await WBClient.searchText(text, 50);
         const fb = demoFb();
         const scored = [];
         raw.forEach((p) => { try { const r = Demo.score(p, S.profile, fb); scored.push(Object.assign({}, p, { aiScore: r.score, aiParts: r.parts })); } catch (se) {} });
