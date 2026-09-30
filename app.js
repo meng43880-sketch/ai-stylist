@@ -116,20 +116,36 @@ const WBClient = {
   async searchText(text, limit) {
     const q = encodeURIComponent(String(text || '').slice(0, 60));
     if (!q) return [];
-    const c = new AbortController();
-    const t = setTimeout(() => c.abort(), 15000);
+    const target = (page, spp) => `https://search.wb.ru/exactmatch/ru/common/v18/search?ab_testing=false&appType=1&curr=rub&dest=-1257786&page=${page}&query=${q}&resultset=catalog&sort=popular&spp=${spp}&suppressSpellcheck=false`;
+    const getJson = async (url, ms) => {
+      const c = new AbortController();
+      const t = setTimeout(() => c.abort(), ms);
+      try {
+        const r = await fetch(url, { signal: c.signal });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return await r.json();
+      } finally { clearTimeout(t); }
+    };
+    /* Прямо → если сеть режет (403), пробуем публичный CORS-прокси.
+       Медленнее и зависит от чужого сервиса — только как fallback. */
+    const proxied = (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+    let all = [], directOk = false;
     try {
-      const jobs = [1, 2].map((page) => fetch(`https://search.wb.ru/exactmatch/ru/common/v18/search?ab_testing=false&appType=1&curr=rub&dest=-1257786&page=${page}&query=${q}&resultset=catalog&sort=popular&spp=25&suppressSpellcheck=false`, { signal: c.signal }).then((r) => { if (!r.ok) throw new Error('WB ' + r.status); return r.json(); }));
-      const settled = await Promise.allSettled(jobs);
-      let all = [];
-      settled.forEach((s) => { if (s.status === 'fulfilled') all = all.concat(((s.value && s.value.data && s.value.data.products) || [])); });
-      const seen = new Set(), out = [];
-      all.map((x) => this.norm(x)).forEach((p) => {
-        if (!p || seen.has(p.id)) return;
-        seen.add(p.id); out.push(p);
-      });
-      return out.slice(0, limit || 50);
-    } finally { clearTimeout(t); }
+      const settled = await Promise.allSettled([1, 2].map((page) => getJson(target(page, 25), 8000)));
+      settled.forEach((s) => { if (s.status === 'fulfilled') { directOk = true; all = all.concat(((s.value && s.value.data && s.value.data.products) || [])); } });
+    } catch (e) {}
+    if (!directOk) {
+      try {
+        const j = await getJson(proxied(target(1, 25)), 12000);
+        all = all.concat(((j && j.data && j.data.products) || []));
+      } catch (e) {}
+    }
+    const seen = new Set(), out = [];
+    all.map((x) => this.norm(x)).forEach((p) => {
+      if (!p || seen.has(p.id)) return;
+      seen.add(p.id); out.push(p);
+    });
+    return out.slice(0, limit || 50);
   }
 };
 
