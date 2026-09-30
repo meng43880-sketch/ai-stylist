@@ -680,11 +680,20 @@ function vResults() {
     <div class="feed">${live.map((x, i) => cardHtml(x, i)).join('')}</div>` : ''}
     ${items.length ? `<div class="sect"><h2>Лучшее для тебя</h2>${r.total ? `<span>${r.total}</span>` : ''}</div>
     <div class="feed">${items.map((x, i) => cardHtml(x, i)).join('')}</div>` : ''}
-    ${!items.length && !live.length && !r.outfit && r.ok ? `<div class="empty"><h3>Ничего не нашлось</h3><p class="small">Попробуй переформулировать запрос.</p></div>` : ''}
+    ${!items.length && !live.length && !r.outfit && r.ok ? `<div class="empty"><h3>Смотрим живьём</h3><p class="small">AI собрал запрос — открываем настоящий поиск маркетплейса в новой вкладке.</p>
+    <div style="display:grid;gap:8px;margin-top:14px"><button class="btn" onclick="openSearch('WB')">Искать «${esc((r.query || 'одежда').slice(0, 32))}» на WB</button>
+    <button class="btn secondary" onclick="openSearch('OZON')">Тот же запрос на Ozon</button></div></div>` : ''}
     <div style="height:150px"></div>
     ${(items.length || live.length) ? `<div class="cta"><button class="btn" onclick="feedFromResult()">${ic('check', 16)} В ленту на главной</button></div>` : ''}
   </div>`;
 }
+window.openSearch = function (mp) {
+  const r = S.lastResult;
+  const q = encodeURIComponent(((r && r.query) || 'одежда').slice(0, 60));
+  const url = mp === 'OZON' ? `https://www.ozon.ru/search/?text=${q}` : `https://www.wildberries.ru/catalog/0/search.aspx?search=${q}`;
+  window.open(url, '_blank');
+  toast(mp === 'OZON' ? 'Открываем поиск Ozon' : 'Открываем поиск WB');
+};
 window.feedFromResult = function () {
   const r = S.lastResult; if (!r) return;
   const items = ((r.live || []).concat(r.picks || [])).map((id) => RC[id]).filter(Boolean);
