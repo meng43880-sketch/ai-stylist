@@ -28,6 +28,7 @@ const P = {
   check: '<path d="M4 12.5l5 5L20 6.5"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
   send: '<path d="M4 12 20 5l-7 15-2.3-6.2z"/><path d="M9.7 14.3 20 5"/>',
+  share: '<path d="M12 15V4M8 8l4-4 4 4"/><path d="M5 12v8a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-8"/>',
   search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
   sliders: '<path d="M4 7h9M17.5 7H20M4 17h3M11.5 17H20"/><circle cx="15" cy="7" r="2.2"/><circle cx="9" cy="17" r="2.2"/>',
   star: '<path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.8-5.2-2.8-5.2 2.8 1-5.8L3.5 9.7l5.9-.8z"/>',
@@ -729,7 +730,8 @@ function renderDemoProduct(p, rv, id) {
       <div class="gal" style="margin:14px -20px 0;position:relative">${IM(p.img, p.title)}
         <button class="iconbtn l" style="position:absolute;top:14px;left:14px" onclick="go('home')" aria-label="Назад">${ic('back', 19)}</button></div>
       <div class="row" style="margin-top:14px"><div class="grow"><span class="small muted">${p.mp === 'WB' ? 'Wildberries' : 'Ozon'} · ${ic('star', 12)} ${p.rating}</span></div>
-      <button class="iconbtn favbtn ${fav ? 'on' : ''}" onclick="fav('${p.id}')" aria-label="В избранное" style="${fav ? 'color:#E11D48' : ''}">${ic('heart', 19)}</button></div>
+      <button class="iconbtn favbtn ${fav ? 'on' : ''}" onclick="fav('${p.id}')" aria-label="В избранное" style="${fav ? 'color:#E11D48' : ''}">${ic('heart', 19)}</button>
+      <button class="iconbtn" onclick="shareProduct('${p.id}')" aria-label="Поделиться" style="margin-left:8px">${ic('share', 18)}</button></div>
       <h1 style="font-size:21px;margin-top:6px">${esc(p.title)}</h1>
       <div class="price">${fmt(p.price)}<s>${fmt(p.old)}</s></div>
       <p class="sub">${esc(p.desc || '')}</p>
@@ -769,6 +771,38 @@ function renderLiveProduct(p) {
     <div style="height:150px"></div>
     <div class="cta"><button class="btn" onclick="market('${p.id}')">Купить на Wildberries ${ic('upRight', 16)}</button></div>`;
 }
+function shareUrl(p) {
+  if (p.live && p.url) return p.url;
+  const q = encodeURIComponent(p.title);
+  return p.mp === 'WB' ? `https://www.wildberries.ru/catalog/0/search.aspx?search=${q}` : `https://www.ozon.ru/search/?text=${q}`;
+}
+window.shareProduct = async function (id) {
+  const p = RC[id]; if (!p) return;
+  const data = { title: p.title, text: `${p.title} — ${fmt(p.price)}`, url: shareUrl(p) };
+  try {
+    if (navigator.share) { await navigator.share(data); return; }
+    throw new Error('no share');
+  } catch (e) {
+    try {
+      if (navigator.clipboard) await navigator.clipboard.writeText(`${data.text}\n${data.url}`);
+      toast('Ссылка скопирована');
+    } catch (ce) { toast('Не получилось поделиться'); }
+  }
+};
+window.shareOutfit = async function (id) {
+  const o = findOutfit(id); if (!o) return;
+  const items = (o.items || []).map((x) => (typeof x === 'string' ? RC[x] : x)).filter(Boolean);
+  const text = `${o.name} (${fmt(o.total)}):\n` + items.map((p) => `• ${p.title} — ${shareUrl(p)}`).join('\n');
+  try {
+    if (navigator.share) { await navigator.share({ title: o.name, text }); return; }
+    throw new Error('no share');
+  } catch (e) {
+    try {
+      if (navigator.clipboard) await navigator.clipboard.writeText(text);
+      toast('Образ скопирован');
+    } catch (ce) { toast('Не получилось поделиться'); }
+  }
+};
 window.market = async function (id) {
   const p = RC[id]; if (!p) return;
   let raw;
@@ -830,7 +864,7 @@ function vOutfit(id) {
     <div class="ocollage" style="margin-top:14px">${items.map((p) => IM(p.img, p.title)).join('')}</div>
     <div style="margin-top:6px">${items.map((p) => `<div class="kv"><span>${esc(p.title)}</span><b>${fmt(p.price)}</b></div>`).join('')}</div>
     <div style="height:150px"></div>
-    <div class="cta">${saved ? `<button class="btn secondary" onclick="go('outfits')">Уже сохранён</button>` : `<button class="btn" onclick="keepOutfit('${o.id}')">${ic('check', 16)} Сохранить образ</button>`}</div></div>`;
+    <div class="cta">${saved ? `<button class="btn secondary" onclick="go('outfits')">Уже сохранён</button>` : `<button class="btn" onclick="keepOutfit('${o.id}')">${ic('check', 16)} Сохранить образ</button>`}<button class="btn secondary" onclick="shareOutfit('${o.id}')">${ic('share', 16)} Поделиться</button></div></div>`;
 }
 window.keepOutfit = function (id) {
   const o = findOutfit(id); if (!o) return;
