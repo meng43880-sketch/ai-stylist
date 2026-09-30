@@ -74,18 +74,33 @@ function normalizeWbItem(raw) {
     live: true, source: 'wb', url: wbUrl(id), fetchedAt: Date.now(), desc: ''
   };
 }
+/* Публичные CORS-прокси как крайняя мера: запрос идёт с чужого IP.
+   Только текст поискового запроса, без данных пользователя. */
+const WB_PROXIES = [
+  (u) => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u),
+  (u) => 'https://corsproxy.io/?url=' + encodeURIComponent(u)
+];
 async function wbFetch(url) {
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), 15000);
+  const attempt = async (target, ms) => {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), ms);
+    try {
+      const r = await fetch(target, { signal: ctrl.signal, headers: { 'User-Agent': WB_UA, Accept: 'application/json', 'Accept-Language': 'ru-RU,ru;q=0.9' } });
+      if (r.status === 403 || r.status === 429) { const e = new Error('reject ' + r.status); e.code = 'REJECT'; throw e; }
+      if (!r.ok) { const e = new Error('HTTP ' + r.status); e.code = 'HTTP'; throw e; }
+      return await r.json();
+    } finally { clearTimeout(t); }
+  };
   try {
-    const r = await fetch(url, { signal: ctrl.signal, headers: { 'User-Agent': WB_UA, Accept: 'application/json', 'Accept-Language': 'ru-RU,ru;q=0.9' } });
-    if (r.status === 403 || r.status === 429) { const e = new Error('Wildberries отклонил запрос с этой сети (HTTP ' + r.status + ')'); e.code = 'WB_BLOCKED'; e.status = 502; throw e; }
-    if (!r.ok) { const e = new Error('Wildberries: HTTP ' + r.status); e.code = 'WB_ERROR'; e.status = 502; throw e; }
-    return r.json();
-  } catch (e) {
-    if (e.code) throw e;
-    const x = new Error('Wildberries недоступен: ' + e.message); x.code = 'WB_DOWN'; x.status = 502; throw x;
-  } finally { clearTimeout(t); }
+    return await attempt(url, 10000);
+  } catch (e) { /* прямой путь закрыт — пробуем прокси */ }
+  for (const px of WB_PROXIES) {
+    try {
+      return await attempt(px(url), 12000);
+    } catch (e) { /* следующий */ }
+  }
+  const err = new Error('Wildberries недоступен ни напрямую, ни через прокси');
+  err.code = 'WB_BLOCKED'; err.status = 502; throw err;
 }
 /* Живой поиск WB. Возвращает нормализованные товары. */
 async function wbSearchServer(query, limit, page) {

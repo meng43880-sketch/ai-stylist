@@ -127,17 +127,20 @@ const WBClient = {
         return await r.json();
       } finally { clearTimeout(t); }
     };
-    /* Прямо → если сеть режет (403), пробуем публичный CORS-прокси.
-       Медленнее и зависит от чужого сервиса — только как fallback. */
-    const proxied = (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+    /* Прямо → allorigins → corsproxy.io. Дальше — только смена сети. */
+    const proxied = [
+      (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+      (u) => `https://corsproxy.io/?url=${encodeURIComponent(u)}`
+    ];
     let all = [], directOk = false;
     try {
       const settled = await Promise.allSettled([1, 2].map((page) => getJson(target(page, 25), 8000)));
       settled.forEach((s) => { if (s.status === 'fulfilled') { directOk = true; all = all.concat(((s.value && s.value.data && s.value.data.products) || [])); } });
     } catch (e) {}
-    if (!directOk) {
+    for (const px of proxied) {
+      if (directOk || all.length) break;
       try {
-        const j = await getJson(proxied(target(1, 25)), 12000);
+        const j = await getJson(px(target(1, 25)), 12000);
         all = all.concat(((j && j.data && j.data.products) || []));
       } catch (e) {}
     }
