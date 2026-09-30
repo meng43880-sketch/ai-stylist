@@ -204,10 +204,10 @@ async function searchPipeline({ struct, text, profile, feedback, limit, wardrobe
   if (CFG.dataSource === 'hybrid') {
     try {
       const queries = (text && text.trim()) ? [text.trim()] : M.structToQueries(struct || {});
-      const live = await M.funnelSearch(queries, 25, 1);
+      const live = await M.funnelSearch(queries, 5, 1);
       if (live.length) {
         const ctx = scoreCtx(profile, feedback, { occasion: struct && struct.occasion, wardrobe: wardrobe || [] });
-        const scored = M.scoreLive(live.slice(0, 50), ctx).slice(0, 50);
+        const scored = M.scoreLive(live.slice(0, 1), ctx).slice(0, 1);
         const fresh = await ensureLiveAnalyses(scored);
         Object.assign(analyses, fresh);
         const ids = new Set(scored.map((x) => x.id));

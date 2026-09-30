@@ -132,15 +132,17 @@ const WBClient = {
       (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
       (u) => `https://corsproxy.io/?url=${encodeURIComponent(u)}`
     ];
+    /* Эксперимент: тянем ровно 1 товар. Если блок по IP — 403 останется. */
     let all = [], directOk = false;
     try {
-      const settled = await Promise.allSettled([1, 2].map((page) => getJson(target(page, 25), 8000)));
-      settled.forEach((s) => { if (s.status === 'fulfilled') { directOk = true; all = all.concat(((s.value && s.value.data && s.value.data.products) || [])); } });
+      const j = await getJson(target(1, 5), 8000);
+      directOk = true;
+      all = all.concat(((j && j.data && j.data.products) || []));
     } catch (e) {}
     for (const px of proxied) {
       if (directOk || all.length) break;
       try {
-        const j = await getJson(px(target(1, 25)), 12000);
+        const j = await getJson(px(target(1, 5)), 12000);
         all = all.concat(((j && j.data && j.data.products) || []));
       } catch (e) {}
     }
@@ -149,7 +151,7 @@ const WBClient = {
       if (!p || seen.has(p.id)) return;
       seen.add(p.id); out.push(p);
     });
-    return out.slice(0, limit || 50);
+    return out.slice(0, 1);
   }
 };
 
