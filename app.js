@@ -765,6 +765,7 @@ function renderLiveProduct(p) {
     <h1 style="font-size:21px;margin-top:6px">${esc(p.title)}</h1>
     <div class="price">${fmt(p.price)}<s>${fmt(p.old)}</s></div>
     <p class="sub">${esc(p.brand || '')} · размеры на WB: <b style="color:var(--ink)">${(p.sizes || []).slice(0, 6).join(', ')}</b></p>
+    ${p.nmId ? `<button class="link" style="padding:4px 0" onclick="copyArt('${p.nmId}')">Артикул WB: <b>${p.nmId}</b> · копировать</button>` : ''}
     <div class="note"><b>${p.aiScore}% тебе подходит.</b> Живые данные WB — цена и наличие на момент поиска.</div>
     <div class="why">${rows.map(([t, v, d]) => `<div class="whyrow"><div><b>${t}</b><span>${d}</span></div><span class="n">${v == null ? '—' : v}</span></div>`).join('')}</div>
     <p class="sub">Отзывы и точное наличие — на странице товара в магазине, мы их не копируем.</p>
@@ -789,8 +790,13 @@ window.shareProduct = async function (id) {
     } catch (ce) { toast('Не получилось поделиться'); }
   }
 };
-window.shareOutfit = async function (id) {
-  const o = findOutfit(id); if (!o) return;
+window.copyArt = async function (nmId) {
+  try {
+    if (navigator.clipboard) await navigator.clipboard.writeText(String(nmId));
+    toast('Артикул скопирован — вставь в поиск WB');
+  } catch (e) { toast('Артикул: ' + nmId); }
+};
+window.shareOutfit = async function (id) {  const o = findOutfit(id); if (!o) return;
   const items = (o.items || []).map((x) => (typeof x === 'string' ? RC[x] : x)).filter(Boolean);
   const text = `${o.name} (${fmt(o.total)}):\n` + items.map((p) => `• ${p.title} — ${shareUrl(p)}`).join('\n');
   try {
