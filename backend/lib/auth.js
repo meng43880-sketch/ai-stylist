@@ -57,7 +57,7 @@ function register(login, password) {
   if (!validPassword(password)) throw Q.err('BAD_REQUEST', 'Пароль: минимум 6 символов', 400);
   if (findUser(login)) throw Q.err('BAD_REQUEST', 'Такой логин уже занят', 400);
   const store = AuthUsers();
-  const user = { id: 'u' + Date.now().toString(36) + crypto.randomBytes(3).toString('hex'), login: login.toLowerCase(), hash: hashPw(password), createdAt: Date.now(), trusted: false };
+  const user = { id: 'u' + Date.now().toString(36) + crypto.randomBytes(3).toString('hex'), login: login.toLowerCase(), hash: hashPw(password), createdAt: Date.now() };
   store.db.users.push(user);
   store.save();
   return issueToken(user.id);

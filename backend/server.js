@@ -95,15 +95,6 @@ async function route(req, res) {
       A.logout(b.token || '');
       return send(res, 200, { ok: true });
     }
-    /* --- admin: выдача trusted (только с ADMIN_TOKEN из env) --- */
-    if (p === '/api/admin/trust' && m === 'POST') {
-      const b = await readBody(req);
-      if (!process.env.ADMIN_TOKEN || b.adminToken !== process.env.ADMIN_TOKEN) return send(res, 403, { ok: false, error: 'Нет доступа' });
-      const u = (db.users || []).find((x) => x.login === String(b.login || '').toLowerCase());
-      if (!u) return send(res, 404, { ok: false, error: 'Юзер не найден' });
-      u.trusted = true; save();
-      return send(res, 200, { ok: true, login: u.login, trusted: true });
-    }
     /* --- status / context --- */
     if (m === 'GET' && p === '/api/status') return send(res, 200, { ok: true, aiMode: CFG.aiMode, demoMode: CFG.demoMode, dataSource: CFG.dataSource, season: R.currentSeason(), usage: db.usage || {}, providers: { vision: Q.isConfigured(CFG.qwen.vision), stylist: Q.isConfigured(CFG.qwen.stylist), product: Q.isConfigured(CFG.qwen.product) } });
     if (m === 'GET' && p === '/api/context') {
@@ -225,17 +216,6 @@ async function route(req, res) {
       save(); return send(res, 200, { ok: true, favorites: U.favorites });
     }
     if (m === 'GET' && p === '/api/history') return send(res, 200, { ok: true, history: U.history.slice(0, 50) });
-    /* --- community: товары от пользователей (явный шеринг) --- */
-    if (m === 'POST' && p === '/api/collect') {
-      const b = await readBody(req);
-      const r = M.collectItem(uid, b);
-      logHistory('collect', 'Поделился товаром: ' + r.item.title, uid);
-      return send(res, 200, { ok: true, data: r });
-    }
-    if (m === 'GET' && p === '/api/collect/search') {
-      const r = M.searchCommunity({ query: url.searchParams.get('q') || '', limit: Math.min(50, parseInt(url.searchParams.get('limit')) || 20) });
-      return send(res, 200, { ok: true, items: r.items, total: r.total });
-    }
     /* --- market: живые данные --- */
     if (m === 'GET' && p === '/api/market/wb/search') {
       const q = String(url.searchParams.get('q') || '').slice(0, 80);

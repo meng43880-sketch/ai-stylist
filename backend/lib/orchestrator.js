@@ -219,22 +219,6 @@ async function searchPipeline({ struct, text, profile, feedback, limit, wardrobe
       total += ds.total;
     }
   } catch (e) { /* датасет недоступен — идём дальше без него */ }
-  // Community-база: товары, которыми явно поделились пользователи.
-  try {
-    const com = M.searchCommunity({
-      query: text || '', category: struct.category || '', subcategory: struct.subcategory || '',
-      maxPrice: struct.maxPrice || null, colors: struct.color ? [struct.color] : [], limit: 60
-    });
-    if (com.items.length) {
-      const comCtx = scoreCtx(profile, feedback, { occasion: struct && struct.occasion, wardrobe: wardrobe || [] });
-      const comRanked = R.rankProducts(com.items, comCtx);
-      const seen2 = new Set(cands.map((x) => x.id));
-      comRanked.forEach((x) => { if (!seen2.has(x.id)) { seen2.add(x.id); cands.push(x); } });
-      cands.sort((a, b) => b.aiScore - a.aiScore);
-      cands = cands.slice(0, limit || 20);
-      total += com.total;
-    }
-  } catch (e) { /* пусто — идём дальше */ }
   let source = CFG.dataSource;
   // hybrid: воронка живья WB (веер × 1 страница, до ~50) → топ-50.
   if (CFG.dataSource === 'hybrid') {
