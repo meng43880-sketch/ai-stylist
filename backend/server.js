@@ -16,12 +16,18 @@ const A = require('./lib/auth');
 
 const ROOT = path.join(__dirname, '..');
 const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.json': 'application/json; charset=utf-8' };
-/* rate limiting: 60 req/min с IP */
+/* rate limiting: 60 req/min с IP; auth — строже (10/мин против перебора) */
 const hits = new Map();
+const authHits = new Map();
 function rateOk(ip) {
   const now = Date.now(); const arr = (hits.get(ip) || []).filter((t) => now - t < 60000);
   arr.push(now); hits.set(ip, arr);
   return arr.length <= CFG.limits.ratePerMin;
+}
+function authRateOk(ip) {
+  const now = Date.now(); const arr = (authHits.get(ip) || []).filter((t) => now - t < 60000);
+  arr.push(now); authHits.set(ip, arr);
+  return arr.length <= 10;
 }
 function send(res, code, obj) {
   const body = JSON.stringify(obj);
@@ -79,7 +85,10 @@ async function route(req, res) {
   if (!p.startsWith('/api/')) return send(res, 404, { ok: false, error: 'Не найдено' });
 
   try {
-    /* --- auth (публично) --- */
+    /* --- auth (публично, строгий лимит) --- */
+    if (p.startsWith('/api/auth/')) {
+      if (!authRateOk(ip)) return send(res, 429, { ok: false, code: 'RATE_LIMIT', error: 'Слишком много попыток входа. Подожди минуту.' });
+    }
     if (p === '/api/auth/register' && m === 'POST') {
       const b = await readBody(req);
       const token = A.register(b.login, b.password);

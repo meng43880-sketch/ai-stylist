@@ -199,8 +199,12 @@ function render() {
   const main = ['home', 'outfits', 'wardrobe', 'favorites', 'profile'].includes(S.route);
   const tabs = $('#tabs');
   tabs.hidden = !main;
-  $('#app').classList.toggle('notabs', !main);
-  document.querySelector('.stage').className = 'stage route-' + S.route;
+  try {
+    const appEl = $('#app');
+    if (appEl) appEl.classList.toggle('notabs', !main);
+    const st = document.querySelector('.stage');
+    if (st) st.className = 'stage route-' + S.route;
+  } catch (e) {}
   if (main) tabs.innerHTML = TABS.map(([r, t, i]) => `<button class="tab ${S.route === r ? 'on' : ''}" onclick="go('${r}')" aria-label="${t}">${ic(i, 24)}${t}</button>`).join('');
   if (S.route === 'analyzing') runAnalyzing();
   if (S.route === 'home') { loadCtx(); scrollMsgs(); }
@@ -521,6 +525,7 @@ function vHome() {
     <div class="row"><div class="grow"><div class="hello" id="seasonline">${seasonText()}${w && w.city ? ` · ${esc(w.city)}` : ''}</div>
     <h1 class="title">Привет${p.name ? ', ' + esc(p.name) : ''}!</h1></div>
     ${S.photo ? `<img class="avatar" src="${S.photo}" onclick="go('profile')" alt="Профиль">` : `<button class="avatar" onclick="go('profile')">${esc((p.name || '?')[0])}</button>`}</div>
+    <div id="offlinebar"></div>
 
     <div class="ai">
       <div class="ai-head"><span class="ai-ava2">${spark(13)}</span>Стилист ${S.aiModel ? `<span class="model">· ${esc(S.aiModel)}</span>` : ''}<button class="newchat" onclick="newChat()" aria-label="Новый диалог">${ic('plus', 16)}</button></div>
@@ -1068,7 +1073,6 @@ function vProfile() {
   const p = S.profile;
   const ins = (S.wardrobe && S.wardrobe.insights) || null;
   const styleNames = { casual: 'Повседневный', smart: 'Smart casual', street: 'Streetwear', minimal: 'Минимализм', sport: 'Спорт', oldmoney: 'Old money', business: 'Деловой', classic: 'Классика', oversize: 'Oversize', party: 'На выход' };
-  const colorNames = { black: 'Чёрный', white: 'Белый', olive: 'Олива', beige: 'Бежевый', gray: 'Серый', green: 'Зелёный', blue: 'Синий', brown: 'Коричневый' };
   const colorHex = { black: '#171717', white: '#FFFFFF', olive: '#6B7C3A', beige: '#D9C7A7', gray: '#9AA0A3', green: '#134E3A', blue: '#3B5BFF', brown: '#7A5230' };
   return `<div class="wrap">
     <div class="phead">
@@ -1138,6 +1142,14 @@ render = function () {
   __render();
   if (S.route === 'product') window.__loadProduct(S.params.id);
   if (S.route === 'favorites') window.__loadFav();
+  if (S.route === 'home') {
+    try {
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        const ob = document.getElementById('offlinebar');
+        if (ob) ob.innerHTML = `<div class="offline">Нет соединения — показываем сохранённое локально.</div>`;
+      }
+    } catch (e) {}
+  }
   if (S.route === 'home' && !S.feed.items.length && !S._fed) { S._fed = true; loadFeed('').then(() => { if (S.route === 'home') render(); }); }
   if (S.route === 'home' && !S.feedOutfits.length && !S._ofed) { S._ofed = true; loadOutfits().then(() => { if (S.route === 'home') render(); }); }
   if ((S.route === 'home' || S.route === 'profile') && !S._wfed) { S._wfed = true; loadWardrobe().then(() => { loadGaps().then(() => { if (['home', 'profile'].includes(S.route)) render(); }); }); }

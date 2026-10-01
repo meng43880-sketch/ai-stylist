@@ -260,6 +260,7 @@ img{max-width:100%}
 .menurow small{display:block;font-weight:400;color:var(--muted);font-size:13px;margin-top:1px}
 .menurow svg:last-child{margin-left:auto;color:var(--muted)}
 .note{background:var(--mint);border-radius:16px;padding:14px 16px;font-size:13.5px;line-height:1.55;color:var(--mint-ink);margin-top:14px}
+.offline{background:#FFF4E0;border:1px solid #F0D9A8;color:#7A5200;border-radius:14px;padding:11px 15px;font-size:13px;font-weight:600;margin-top:12px}
 button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--cobalt);outline-offset:2px}
 /* profile: шапка, вкус, группы */
 .phead{text-align:center;padding:26px 0 6px}
