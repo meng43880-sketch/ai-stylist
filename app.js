@@ -36,7 +36,8 @@ const P = {
   upRight: '<path d="M7 17 17 7M9 7h8v8"/>',
   camera: '<path d="M4 8h3l2-2.5h6L17 8h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/>',
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5 5l1.8 1.8M17.2 17.2 19 19M19 5l-1.8 1.8M6.8 17.2 5 19"/>',
-  shield: '<path d="M12 3l7.5 3v5.5c0 4.5-3.2 7.6-7.5 9-4.3-1.4-7.5-4.5-7.5-9V6z"/><path d="M9 12l2 2 4-4"/>'
+  shield: '<path d="M12 3l7.5 3v5.5c0 4.5-3.2 7.6-7.5 9-4.3-1.4-7.5-4.5-7.5-9V6z"/><path d="M9 12l2 2 4-4"/>',
+  hanger: '<circle cx="12" cy="4.5" r="2"/><path d="M12 6.5V8M12 8l-8 9.5h16z"/>'
 };
 const ic = (n, s) => `<svg width="${s || 20}" height="${s || 20}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[n] || ''}</svg>`;
 function spark(size) { return ic('spark', size || 13); }
@@ -191,11 +192,11 @@ window.__on401 = function () {
   S.token = null; save();
   if (NEED_AUTH.includes(S.route)) { S.authErr = 'Сессия истекла — войди заново.'; go('auth'); }
 };
-const TABS = [['home', 'Главная', 'home'], ['outfits', 'Образы', 'shirt'], ['favorites', 'Сохранённое', 'heart'], ['profile', 'Профиль', 'user']];
+const TABS = [['home', 'Главная', 'home'], ['outfits', 'Образы', 'shirt'], ['wardrobe', 'Гардероб', 'hanger'], ['favorites', 'Сохранённое', 'heart'], ['profile', 'Профиль', 'user']];
 function render() {
   const v = { welcome: vWelcome, auth: vAuth, photo: vPhoto, params: vParams, style: vStyle, analyzing: vAnalyzing, home: vHome, results: vResults, product: () => vProduct(S.params.id), outfit: () => vOutfit(S.params.id), outfits: vOutfits, favorites: vFav, profile: vProfile, wardrobe: vWardrobe, privacy: vPrivacy }[S.route] || vWelcome;
   $('#app').innerHTML = `<div class="screen">${v()}</div>`;
-  const main = ['home', 'outfits', 'favorites', 'profile'].includes(S.route);
+  const main = ['home', 'outfits', 'wardrobe', 'favorites', 'profile'].includes(S.route);
   const tabs = $('#tabs');
   tabs.hidden = !main;
   if (main) tabs.innerHTML = TABS.map(([r, t, i]) => `<button class="tab ${S.route === r ? 'on' : ''}" onclick="go('${r}')" aria-label="${t}">${ic(i, 24)}${t}</button>`).join('');
@@ -942,7 +943,7 @@ function dot(c) { return `<span class="cdot" style="background:${CDOT[c] || '#cc
 function vWardrobe() {
   const w = S.wardrobe, ins = w.insights;
   return `<div class="wrap">
-    <div class="row"><button class="iconbtn" onclick="go('profile')" aria-label="Назад">${ic('back', 19)}</button>
+    <div class="row"><button class="iconbtn" onclick="go('home')" aria-label="Назад">${ic('back', 19)}</button>
     <div class="grow"><h1 class="title" style="font-size:24px">Мой гардероб</h1></div></div>
     ${ins && ins.count ? `<div class="note"><b>Что видит AI.</b> ${esc(ins.note)}<div class="row" style="margin-top:10px;gap:6px">${ins.colors.map(dot).join('')}<span class="small muted" style="margin-left:4px">${ins.styles.map((s) => (STYLES.find(([k]) => k === s) || [])[1] || s).join(' · ')}</span></div></div>`
     : `<div class="note">Добавь 3–5 любимых вещей — AI поймёт твой вкус, и лента станет точнее. Учитываются цвета, стили и пробелы.</div>`}
