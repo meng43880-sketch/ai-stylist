@@ -219,6 +219,24 @@ async function searchPipeline({ struct, text, profile, feedback, limit, wardrobe
       total += ds.total;
     }
   } catch (e) { /* датасет недоступен — идём дальше без него */ }
+  // Takprodam: легальный каталог с партнёрскими ссылками (нужен токен).
+  try {
+    const svc = new M.MarketplaceService();
+    const tp = await svc.search({
+      marketplace: 'takprodam', query: text || '',
+      category: struct.category || '',
+      maxPrice: struct.maxPrice || undefined, limit: 60
+    });
+    if (tp.items.length) {
+      const tpCtx = scoreCtx(profile, feedback, { occasion: struct && struct.occasion, wardrobe: wardrobe || [] });
+      const tpRanked = R.rankProducts(tp.items, tpCtx);
+      const seen3 = new Set(cands.map((x) => x.id));
+      tpRanked.forEach((x) => { if (!seen3.has(x.id)) { seen3.add(x.id); cands.push(x); } });
+      cands.sort((a, b) => b.aiScore - a.aiScore);
+      cands = cands.slice(0, limit || 20);
+      total += tp.total;
+    }
+  } catch (e) { /* нет токена или API легло — молча дальше */ }
   let source = CFG.dataSource;
   // hybrid: воронка живья WB (веер × 1 страница, до ~50) → топ-50.
   if (CFG.dataSource === 'hybrid') {

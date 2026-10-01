@@ -304,6 +304,103 @@ class DemoMarketplaceProvider extends MarketplaceProvider {
   }
 }
 
+/* ---------- Takprodam Publisher API: легальный каталог + партнёрки ----------
+   Регистрация паблишера (сайт/агрегатор) → токен из профиля → env.
+   Методы: product/ (товары с tracking_link, фильтры marketplace/category/
+   payment, limit до 1000), product-category/, promotion/, source/.
+   Цены/комиссии обновляются раз в сутки. legal_text показываем в UI. */
+const TAKPRODAM_BASE = 'https://api.takprodam.ru/v2/publisher';
+function takprodamCfg() {
+  return { key: process.env.TAKPRODAM_API_KEY || '' };
+}
+async function takprodamGet(path, params) {
+  const { key } = takprodamCfg();
+  if (!key) { const e = new Error('Нужен TAKPRODAM_API_KEY: регистрация паблишера на takprodam.ru → токен из профиля.'); e.code = 'NO_SOURCE'; e.status = 503; throw e; }
+  const qs = new URLSearchParams(params || {}).toString();
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), 20000);
+  try {
+    const r = await fetch(TAKPRODAM_BASE + path + (qs ? '?' + qs : ''), { signal: ctrl.signal, headers: { Authorization: 'Bearer ' + key, Accept: 'application/json' } });
+    if (r.status === 401 || r.status === 403) { const e = new Error('Недействительный TAKPRODAM_API_KEY'); e.code = 'AUTH'; e.status = 502; throw e; }
+    if (!r.ok) { const e = new Error('Takprodam: HTTP ' + r.status); e.code = 'TP_ERROR'; e.status = 502; throw e; }
+    return r.json();
+  } catch (e) {
+    if (e.code) throw e;
+    const x = new Error('Takprodam недоступен: ' + e.message); x.code = 'TP_DOWN'; x.status = 502; throw x;
+  } finally { clearTimeout(t); }
+}
+function takprodamCatToOurs(tpCategory) {
+  const s = String(tpCategory || '').toLowerCase();
+  for (const [k, v] of WB_CATS) if (s.includes(k)) return v;
+  return '';
+}
+function normalizeTakprodam(raw) {
+  if (!raw || !raw.id) return null;
+  const mpName = String(raw.marketplace_title || '').toLowerCase();
+  const mp = mpName.includes('ozon') ? 'OZON' : 'WB';
+  const price = Math.round(Number(raw.price)) || 0;
+  if (!price) return null;
+  const title = String(raw.title || '').slice(0, 120);
+  return {
+    id: 'tp' + raw.id, marketplace: mp === 'OZON' ? 'ozon' : 'wildberries',
+    marketplaceProductId: String(raw.product_id || raw.product_sku || raw.id),
+    title, brand: String(raw.store_title || '').slice(0, 40),
+    cat: takprodamCatToOurs(raw.product_category + ' ' + title),
+    category: takprodamCatToOurs(raw.product_category + ' ' + title),
+    price, oldPrice: price, old: price, currency: 'RUB',
+    img: String(raw.image_url || ''), imageUrl: String(raw.image_url || ''), mp,
+    url: String(raw.external_link || ''), trackingUrl: String(raw.tracking_link || ''),
+    rating: 0, reviews: 0, reviewCount: 0,
+    colors: wbColorKeys([title]), sizes: ['One'],
+    styles: wbStyles(title), fit: 'regular',
+    availability: { inStock: null, sizes: [] },
+    commission: raw.commission != null ? Number(raw.commission) : null,
+    legalText: String(raw.legal_text || ''),
+    live: true, source: 'takprodam', fetchedAt: Date.now(), desc: ''
+  };
+}
+class TakprodamCatalogProvider extends CatalogProvider {
+  constructor() { super('takprodam-publisher'); }
+  async search(params) {
+    const q = params || {};
+    // API без текстового поиска: тянем страницы категории и фильтруем локально.
+    const pages = Math.min(3, Math.max(1, q.pages || 2));
+    const perPage = Math.min(200, Math.max(20, q.perPage || 100));
+    let all = [];
+    for (let page = 1; page <= pages; page++) {
+      const j = await takprodamGet('/product/', {
+        marketplace: q.marketplace === 'ozon' ? 'Ozon' : q.marketplace === 'wildberries' ? 'Wildberries' : undefined,
+        category_id: q.tp_category_id || undefined,
+        payment_type: q.payment_type || undefined,
+        page, limit: perPage
+      });
+      const arr = j.products || j.items || j.data || j.results || [];
+      if (!arr.length) break;
+      all = all.concat(arr);
+      if (arr.length < perPage) break;
+    }
+    let items = all.map(normalizeTakprodam).filter(Boolean);
+    if (q.query) {
+      const toks = String(q.query).toLowerCase().replace(/[^a-zа-я0-9ё\s]+/gi, ' ').split(/\s+/).filter((w) => w.length >= 4);
+      if (toks.length) items = items.filter((p) => toks.every((t) => (p.title + ' ' + p.brand).toLowerCase().includes(t)));
+    }
+    if (q.category) items = items.filter((p) => p.cat === q.category);
+    if (q.minPrice != null) items = items.filter((p) => p.price >= q.minPrice);
+    if (q.maxPrice != null) items = items.filter((p) => p.price <= q.maxPrice);
+    const total = items.length;
+    const off = Math.max(0, q.offset || 0);
+    return { items: items.slice(off, off + (q.limit || 24)), total, source: 'takprodam' };
+  }
+  async getProduct() { return null; } // поштучного endpoint нет — только списки
+}
+class TakprodamProvider extends MarketplaceProvider {
+  constructor() { super('takprodam', new TakprodamCatalogProvider()); }
+  async getReviews() { return []; }
+  async getAvailability(id) {
+    const p = await this.getProduct(id);
+    return p ? { inStock: null, sizes: [] } : null;
+  }
+}
 /* ---------- MarketplaceService: единая точка входа ---------- */
 class MarketplaceService {
   constructor(providers) {
@@ -312,6 +409,7 @@ class MarketplaceService {
       wildberries: new WildberriesProvider(),
       ozon: new OzonProvider(),
       demo: new DemoMarketplaceProvider(),
+      takprodam: new TakprodamProvider(),
       dataset: new (class extends MarketplaceProvider {
         constructor() { super('dataset', new DatasetCatalogProvider()); }
         async getReviews() { return []; }
@@ -328,6 +426,7 @@ class MarketplaceService {
     if (mp === 'wb' || mp === 'wildberries') return [this.providers.wildberries];
     if (mp === 'ozon') return [this.providers.ozon];
     if (mp === 'demo') return [this.providers.demo];
+    if (mp === 'takprodam' || mp === 'tp') return [this.providers.takprodam];
     if (mp === 'dataset') return [this.providers.dataset];
     return Object.values(this.providers);
   }
@@ -368,4 +467,4 @@ class MarketplaceService {
   }
 }
 
-module.exports = { wbSearchServer, funnelSearch, dedupeLive, ozonSearchServer, normalizeWbItem, scoreLive, structToQuery, structToQueries, wbPhoto, wbUrl, affLink, toModel, CatalogProvider, DemoCatalogProvider, WbPublicCatalogProvider, OzonCatalogProvider, MarketplaceProvider, WildberriesProvider, OzonProvider, DemoMarketplaceProvider, MarketplaceService };
+module.exports = { wbSearchServer, funnelSearch, dedupeLive, ozonSearchServer, normalizeWbItem, scoreLive, structToQuery, structToQueries, wbPhoto, wbUrl, affLink, toModel, takprodamGet, normalizeTakprodam, CatalogProvider, DemoCatalogProvider, WbPublicCatalogProvider, OzonCatalogProvider, TakprodamCatalogProvider, MarketplaceProvider, WildberriesProvider, OzonProvider, DemoMarketplaceProvider, TakprodamProvider, MarketplaceService };

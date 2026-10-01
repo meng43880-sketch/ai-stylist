@@ -750,6 +750,7 @@ function renderDemoProduct(p, rv, id) {
       <div class="price">${fmt(p.price)}<s>${fmt(p.old)}</s></div>
       <p class="sub">${esc(p.desc || '')}</p>
       ${p.dataset ? `<p class="sub" style="font-size:12px">Открытые данные WB (дек 2024): цена и наличие могли измениться — проверь на странице товара.</p>` : ''}
+      ${p.legalText ? `<p class="sub" style="font-size:11.5px">Реклама · ${esc(p.legalText)}</p>` : ''}
       <div class="field"><label>Размер · твой ${esc(need)}</label></div>
       <div class="sizes">${p.sizes.map((s) => `<button class="size ${String(s) === String(need) ? 'on' : ''}">${s}</button>`).join('')}</div>
       <div class="note"><b>${p.aiScore}% тебе подходит.</b> Почему — ниже.</div>
@@ -826,6 +827,7 @@ window.shareOutfit = async function (id) {  const o = findOutfit(id); if (!o) re
 };
 window.market = async function (id) {
   const p = RC[id]; if (!p) return;
+  if (p.trackingUrl) { window.open(p.trackingUrl, '_blank'); toast('Открываем магазин по партнёрской ссылке'); return; }
   let raw;
   if (p.url) raw = p.url;
   else {
