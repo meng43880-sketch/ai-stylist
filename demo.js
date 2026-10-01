@@ -32,9 +32,15 @@ const Demo = (() => {
   function rank(list, profile, fb) {
     return list.map((p) => { const r = score(p, profile, fb); return Object.assign({}, p, { aiScore: r.score, aiParts: r.parts }); }).sort((a, b) => b.aiScore - a.aiScore);
   }
+  function stemRU(w) {
+    w = String(w || '').toLowerCase().replace(/ё/g, 'е');
+    if (w.length <= 4) return w;
+    return w.replace(/(иями|ями|ами|ией|ей|ой|ий|ый|ую|юю|ая|яя|ое|ее|ые|ие|а|я|ы|и|у|ю|е|о|ь)$/, '');
+  }
+  const SUBS = [['tshirt', ['футболк']], ['shirt', ['рубаш', 'блуз']], ['hoodie', ['худи', 'толстов', 'свитшот']], ['jacket', ['куртк', 'ветровк', 'пуховик', 'бомбер', 'жилет', 'пальто', 'плащ', 'парк', 'дубленк']], ['dress', ['плать', 'сарафан']], ['sweater', ['свитер', 'джемпер', 'кардиган', 'водолазк', 'пуловер']], ['suit', ['костюм']], ['robe', ['халат']], ['jeans', ['джинс']], ['pants', ['брюк', 'чинос', 'карго']], ['shorts', ['шорт']], ['skirt', ['юбк']], ['sneakers', ['кроссов', 'кед']], ['boots', ['ботин', 'челси']], ['bag', ['сумк', 'рюкзак']], ['watch', ['часы']], ['cap', ['кепк']], ['hat', ['шапк']], ['wallet', ['кошел']]];
   function parse(q) {
     const s = (q || '').toLowerCase();
-    const r = { category: '', color: '', maxPrice: null, occasion: '' };
+    const r = { category: '', subcategory: '', color: '', maxPrice: null, occasion: '' };
     [['худи|толстов|футбол|рубаш|куртк|пальто|бомбер|свитшот|лонгслив', 'top'], ['брюк|джинс|чинос|карго', 'bottom'], ['кроссов|кед|ботин|челси', 'shoes'], ['рюкзак|часы|кепк|очк', 'acc']].forEach(([re, v]) => { if (new RegExp(re).test(s)) r.category = v; });
     [['чёрн|черн', 'black'], ['бел', 'white'], ['олив', 'olive'], ['беж', 'beige'], ['сер', 'gray'], ['зелен|зелён', 'green'], ['син|голуб', 'blue'], ['коричн', 'brown']].forEach(([re, v]) => { if (new RegExp(re).test(s)) r.color = v; });
     const m = s.replace(/\s/g, '').match(/до(\d+)/);

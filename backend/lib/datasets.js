@@ -53,12 +53,39 @@ const RU_COLORS = [['черн', 'black'], ['бел', 'white'], ['сер', 'gray'
 function ruColors(strs) {
   const out = [];
   (strs || []).forEach((n) => {
-    const s = String(n).toLowerCase();
+    const s = String(n).toLowerCase().replace(/ё/g, 'е');
     RU_COLORS.forEach(([k, v]) => { if (s.includes(k) && !out.includes(v)) out.push(v); });
   });
   return out.slice(0, 2);
 }
 const CAT_KEYS = [['худи', 'top'], ['толстов', 'top'], ['футбол', 'top'], ['рубаш', 'top'], ['куртк', 'top'], ['пальто', 'top'], ['бомбер', 'top'], ['свитшот', 'top'], ['лонгслив', 'top'], ['свитер', 'top'], ['джемпер', 'top'], ['блуз', 'top'], ['майк', 'top'], ['топ', 'top'], ['плать', 'top'], ['брюк', 'bottom'], ['джинс', 'bottom'], ['чинос', 'bottom'], ['карго', 'bottom'], ['юбк', 'bottom'], ['шорт', 'bottom'], ['кроссов', 'shoes'], ['кед', 'shoes'], ['ботин', 'shoes'], ['челси', 'shoes'], ['туфл', 'shoes'], ['сапог', 'shoes'], ['тапоч', 'shoes'], ['рюкзак', 'acc'], ['сумк', 'acc'], ['часы', 'acc'], ['кепк', 'acc'], ['очк', 'acc'], ['ремен', 'acc'], ['шапк', 'acc'], ['шарф', 'acc'], ['перчат', 'acc'], ['кошел', 'acc'], ['костюм', 'top'], ['купальник', 'top'], ['пижам', 'top'], ['халат', 'top'], ['ветровк', 'top'], ['пуховик', 'top'], ['жилет', 'top'], ['кардиган', 'top'], ['водолазк', 'top'], ['поло', 'top'], ['сарафан', 'top'], ['туник', 'top'], ['леггинс', 'bottom'], ['бридж', 'bottom'], ['комбинезон', 'bottom'], ['трусы', 'bottom'], ['сникерс', 'shoes'], ['слипон', 'shoes'], ['сандали', 'shoes'], ['балетк', 'shoes'], ['лофер', 'shoes'], ['угг', 'shoes'], ['босоножк', 'shoes'], ['шлепанц', 'shoes'], ['мокасин', 'shoes'], ['панам', 'acc'], ['бейсболк', 'acc'], ['варежк', 'acc'], ['платок', 'acc'], ['галстук', 'acc'], ['носк', 'acc'], ['колгот', 'acc'], ['браслет', 'acc'], ['серьг', 'acc']];
+/* Точные подкатегории из названия: иначе «верх» = всё от футболки до халата. */
+const SUB_KEYS = [
+  ['tshirt', ['футболк']], ['shirt', ['рубаш', 'блуз']], ['hoodie', ['худи', 'толстов', 'свитшот']],
+  ['jacket', ['куртк', 'ветровк', 'пуховик', 'бомбер', 'жилет', 'пальто', 'плащ', 'парк', 'дубленк']],
+  ['dress', ['плать', 'сарафан']], ['sweater', ['свитер', 'джемпер', 'кардиган', 'водолазк', 'пуловер']],
+  ['polo', ['поло']], ['tank', ['майк', 'топик']], ['suit', ['костюм']], ['pajama', ['пижам']],
+  ['robe', ['халат']], ['swim', ['купальник']],
+  ['pants', ['брюк', 'чинос', 'карго', 'слакс']], ['jeans', ['джинс']], ['shorts', ['шорт', 'бридж']],
+  ['skirt', ['юбк']], ['leggings', ['леггинс']], ['overalls', ['комбинезон']],
+  ['sneakers', ['кроссов', 'кед', 'сникерс', 'слипон']], ['boots', ['ботин', 'челси', 'угг', 'сапог']],
+  ['dress_shoes', ['туфл', 'лофер', 'мокасин', 'балетк']], ['sandals', ['сандал', 'босоножк', 'шлепанц', 'сланц']],
+  ['bag', ['сумк', 'рюкзак', 'клатч', 'шоппер']], ['watch', ['часы']], ['cap', ['кепк', 'бейсболк', 'панам']],
+  ['glasses', ['очк', 'очки']], ['hat', ['шапк', 'бини']], ['scarf', ['шарф', 'платок', 'снуд']],
+  ['gloves', ['перчат', 'варежк']], ['belt', ['ремен', 'ремень']], ['wallet', ['кошел']],
+  ['socks', ['носк', 'носки', 'гольф', 'колгот']], ['jewelry', ['браслет', 'серьг', 'кольц', 'цепочк', 'кулон', 'брошь']]
+];
+function guessSub(name) {
+  const s = String(name || '').toLowerCase();
+  for (const [sub, keys] of SUB_KEYS) { for (const k of keys) if (s.includes(k)) return sub; }
+  return '';
+}
+/* Русский стемминг-лайт: «футболка» и «футболки» → одна основа. */
+function stemRU(w) {
+  w = String(w || '').toLowerCase().replace(/ё/g, 'е');
+  if (w.length <= 4) return w;
+  return w.replace(/(иями|ями|ами|ией|ей|ой|ий|ый|ую|юю|ая|яя|ое|ее|ые|ие|а|я|ы|и|у|ю|е|о|ь)$/, '');
+}
 function guessCat(hay) {
   const s = String(hay || '').toLowerCase();
   for (const [k, v] of CAT_KEYS) if (s.includes(k)) return v;
@@ -111,7 +138,7 @@ function mapRow(r, meta) {
     url: String(r.url || '').split('?')[0],
     rating: parseFloat(r.rating) || 0, reviews: parseInt(r.review_count) || 0, reviewCount: parseInt(r.review_count) || 0,
     colors, sizes: sizeVals.slice(0, 8).length ? sizeVals.slice(0, 8) : ['One'],
-    styles: guessStyles(r.name), fit: 'regular', material, desc: '',
+    styles: guessStyles(r.name), sub: guessSub(r.name + ' ' + crumbStr), fit: 'regular', material, desc: '',
     availability: { inStock: null, sizes: sizeVals.slice(0, 8) },
     live: false, dataset: true, source: 'dataset:' + meta.name, datasetDate: meta.date,
     fetchedAt: Date.now()
@@ -163,12 +190,13 @@ async function ensureLoaded() {
 const STOP_RU = new Set(['найди', 'мне', 'что', 'это', 'как', 'для', 'меня', 'есть', 'хочу', 'подбери', 'покажи', 'нужен', 'нужна', 'нужно', 'образ', 'что-нибудь', 'чтонибудь', 'что-то']);
 function searchRows(rows, q) {
   let list = rows.slice();
+  if (q.subcategory) list = list.filter((p) => p.sub === q.subcategory);
   if (q.query) {
-    const toks = String(q.query).toLowerCase().replace(/[^a-zа-я0-9ё\s]+/gi, ' ').split(/\s+/).filter((w) => w.length >= 4 && !STOP_RU.has(w));
+    const toks = String(q.query).toLowerCase().replace(/[^a-zа-я0-9ё\s]+/gi, ' ').split(/\s+/).filter((w) => w.length >= 4 && !STOP_RU.has(w)).map(stemRU);
     if (toks.length) {
-      const hay = (p) => (p.title + ' ' + (p.brand || '')).toLowerCase();
-      let hit = list.filter((p) => toks.every((t) => hay(p).includes(t)));
-      if (!hit.length) hit = list.filter((p) => toks.some((t) => hay(p).includes(t)));
+      const hay = (p) => (p.title + ' ' + (p.brand || '')).toLowerCase().split(/[^a-zа-я0-9ё]+/i).map(stemRU).join(' ');
+      let hit = list.filter((p) => { const h = hay(p); return toks.every((t) => h.includes(t)); });
+      if (!hit.length) hit = list.filter((p) => { const h = hay(p); return toks.some((t) => h.includes(t)); });
       list = hit;
     }
   }

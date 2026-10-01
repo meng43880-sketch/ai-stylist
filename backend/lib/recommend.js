@@ -140,11 +140,14 @@ function wardrobeInsights(items) {
 }
 function plural(n, a, b, c) { const m = n % 10, h = n % 100; if (m === 1 && h !== 11) return a; if (m >= 2 && m <= 4 && (h < 12 || h > 14)) return b; return c; }
 function nlParse(q) {  const s = (q || '').toLowerCase();
-  const res = { category: '', color: '', maxPrice: null, style: '', occasion: '', size: '' };
+  const res = { category: '', subcategory: '', color: '', maxPrice: null, style: '', occasion: '', size: '' };
   [['чёрн', 'black'], ['черн', 'black'], ['бел', 'white'], ['олив', 'olive'], ['беж', 'beige'], ['сер', 'gray'], ['зелён', 'green'], ['зелен', 'green'], ['син', 'blue'], ['голуб', 'blue'], ['коричн', 'brown']]
     .forEach(([k, v]) => { if (s.includes(k)) res.color = v; });
   [['худи', 'top'], ['толстов', 'top'], ['футбол', 'top'], ['рубаш', 'top'], ['куртк', 'top'], ['пальто', 'top'], ['бомбер', 'top'], ['свитшот', 'top'], ['лонгслив', 'top'], ['брюк', 'bottom'], ['джинс', 'bottom'], ['чинос', 'bottom'], ['карго', 'bottom'], ['кроссов', 'shoes'], ['кед', 'shoes'], ['ботин', 'shoes'], ['челси', 'shoes'], ['рюкзак', 'acc'], ['часы', 'acc'], ['кепк', 'acc'], ['очк', 'acc']]
     .forEach(([k, v]) => { if (s.includes(k)) res.category = v; });
+  /* Точная подкатегория — тот же словарь, что в datasets.js (держи синхронно). */
+  const SUBS = [['tshirt', ['футболк']], ['shirt', ['рубаш', 'блуз']], ['hoodie', ['худи', 'толстов', 'свитшот']], ['jacket', ['куртк', 'ветровк', 'пуховик', 'бомбер', 'жилет', 'пальто', 'плащ', 'парк', 'дубленк']], ['dress', ['плать', 'сарафан']], ['sweater', ['свитер', 'джемпер', 'кардиган', 'водолазк', 'пуловер']], ['polo', ['поло']], ['tank', ['майк', 'топик']], ['suit', ['костюм']], ['pajama', ['пижам']], ['robe', ['халат']], ['swim', ['купальник']], ['pants', ['брюк', 'чинос', 'карго', 'слакс']], ['jeans', ['джинс']], ['shorts', ['шорт', 'бридж']], ['skirt', ['юбк']], ['leggings', ['леггинс']], ['overalls', ['комбинезон']], ['sneakers', ['кроссов', 'кед', 'сникерс', 'слипон']], ['boots', ['ботин', 'челси', 'угг', 'сапог']], ['dress_shoes', ['туфл', 'лофер', 'мокасин', 'балетк']], ['sandals', ['сандал', 'босоножк', 'шлепанц', 'сланц']], ['bag', ['сумк', 'рюкзак', 'клатч', 'шоппер']], ['watch', ['часы']], ['cap', ['кепк', 'бейсболк', 'панам']], ['glasses', ['очк', 'очки']], ['hat', ['шапк', 'бини']], ['scarf', ['шарф', 'платок', 'снуд']], ['gloves', ['перчат', 'варежк']], ['belt', ['ремен', 'ремень']], ['wallet', ['кошел']], ['socks', ['носк', 'носки', 'гольф', 'колгот']], ['jewelry', ['браслет', 'серьг', 'кольц', 'цепочк', 'кулон', 'брошь']]];
+  for (const [sub, keys] of SUBS) { for (const k of keys) { if (s.includes(k)) { res.subcategory = sub; break; } } if (res.subcategory) break; }
   const m = s.replace(/\s/g, '').match(/до(\d+)/) || s.match(/(\d+)\s*(₽|руб|р\b|тыс)/);
   if (m) { let v = parseInt(m[1], 10); if (s.includes('тыс')) v *= 1000; res.maxPrice = v; }
   if (s.includes('old money') || s.includes('олд')) res.style = 'oldmoney';

@@ -205,7 +205,7 @@ async function searchPipeline({ struct, text, profile, feedback, limit, wardrobe
     const rows = await D.ensureLoaded();
     if (rows.length) {
       const ds = D.searchRows(rows, {
-        query: text || '', category: struct.category || '',
+        query: text || '', category: struct.category || '', subcategory: struct.subcategory || '',
         maxPrice: struct.maxPrice || null,
         colors: struct.color ? [struct.color] : [],
         limit: 60
