@@ -161,13 +161,13 @@ const STYLES = [['casual', 'Повседневный'], ['smart', 'Smart casual'
 const SEASON_RU = { spring: 'Весна', summer: 'Лето', autumn: 'Осень', winter: 'Зима' };
 let S = {
   route: 'welcome', params: {},
-  profile: { name: 'Артём', height: 190, weight: 85, gender: 'male', topSize: 'L', pantsSize: '32', shoeSize: '43', build: 'athletic', styles: ['smart', 'minimal'], budget: 5000, colors: ['black', 'white', 'olive', 'beige'] },
+  profile: { name: '', height: '', weight: '', gender: '', topSize: '', pantsSize: '', shoeSize: '', build: '', styles: [], budget: 5000, colors: [] },
   photo: null, aiNote: '', done: false,
   favorites: [], savedOutfits: [], chat: [], cid: null,
   feed: { title: 'Для тебя', items: [], total: 0 },
   feedOutfits: [], gapItems: [], wardrobe: { items: [], insights: null },
   ctx: { season: 'autumn', weather: null },
-  ob: { styles: ['smart', 'minimal'] },
+  ob: { styles: [] }, greeted: false,
   token: null, login: '', authMode: 'login', authErr: ''
 };
 try {
@@ -176,7 +176,7 @@ try {
 } catch (e) {}
 S.route = (S.done && S.token) ? 'home' : 'welcome'; S.params = {};
 function save() {
-  try { localStorage.setItem(LS, JSON.stringify({ profile: S.profile, photo: S.photo, aiNote: S.aiNote, done: S.done, favorites: S.favorites, savedOutfits: S.savedOutfits, chat: S.chat.slice(-30).map((m) => { const c = Object.assign({}, m); delete c.img; return c; }), cid: S.cid, ob: S.ob, token: S.token, login: S.login, aiModel: S.aiModel })); } catch (e) {}
+  try { localStorage.setItem(LS, JSON.stringify({ profile: S.profile, photo: S.photo, aiNote: S.aiNote, done: S.done, favorites: S.favorites, savedOutfits: S.savedOutfits, chat: S.chat.slice(-30).map((m) => { const c = Object.assign({}, m); delete c.img; return c; }), cid: S.cid, ob: S.ob, greeted: S.greeted, token: S.token, login: S.login, aiModel: S.aiModel })); } catch (e) {}
 }
 
 /* ---------- router ---------- */
@@ -300,23 +300,32 @@ function vParams() {
   const seg = (k, opts) => `<div class="chips">${opts.map(([v, t]) => `<button class="chip ${p[k] === v ? 'on' : ''}" onclick="setP('${k}','${v}')">${t}</button>`).join('')}</div>`;
   return `<div class="wrap">${dots(2)}
     <h1 class="title">Пара слов о тебе</h1>
-    <div class="field"><label>Имя</label><input class="input" id="f_name" value="${esc(p.name)}"></div>
-    <div class="grid2"><div class="field"><label>Рост, см</label><input class="input" id="f_h" type="number" value="${p.height}"></div>
-    <div class="field"><label>Вес, кг</label><input class="input" id="f_w" type="number" value="${p.weight}"></div></div>
+    <div class="field"><label>Имя</label><input class="input" id="f_name" value="${esc(p.name)}" placeholder="Как тебя зовут?"></div>
+    <div class="grid2"><div class="field"><label>Рост, см</label><input class="input" id="f_h" type="number" value="${p.height}" placeholder="180"></div>
+    <div class="field"><label>Вес, кг</label><input class="input" id="f_w" type="number" value="${p.weight}" placeholder="75"></div></div>
     <div class="field"><label>Пол</label></div>${seg('gender', [['male', 'Мужской'], ['female', 'Женский']])}
     <div class="field"><label>Телосложение</label></div>${seg('build', [['slim', 'Стройное'], ['average', 'Среднее'], ['athletic', 'Спортивное'], ['plus', 'Плотное']])}
-    <div class="grid3"><div class="field"><label>Верх</label><input class="input" id="f_top" value="${esc(p.topSize)}"></div>
-    <div class="field"><label>Низ</label><input class="input" id="f_pa" value="${esc(p.pantsSize)}"></div>
-    <div class="field"><label>Обувь</label><input class="input" id="f_sh" value="${esc(p.shoeSize)}"></div></div>
+    <div class="grid3"><div class="field"><label>Верх</label><input class="input" id="f_top" value="${esc(p.topSize)}" placeholder="M"></div>
+    <div class="field"><label>Низ</label><input class="input" id="f_pa" value="${esc(p.pantsSize)}" placeholder="31"></div>
+    <div class="field"><label>Обувь</label><input class="input" id="f_sh" value="${esc(p.shoeSize)}" placeholder="42"></div></div>
     <div style="height:16px"></div>
     <button class="btn" onclick="saveParams()">Дальше</button><div style="height:24px"></div></div>`;
 }
 window.setP = function (k, v) { S.profile[k] = v; save(); render(); };
 window.saveParams = function () {
-  const g = (id) => { const el = document.getElementById(id); return el ? el.value : ''; };
+  const g = (id) => { const el = document.getElementById(id); return (el ? el.value : '').trim(); };
+  const fail = (t) => { toast(t); };
+  const name = g('f_name');
+  const height = parseInt(g('f_h')) || 0, weight = parseInt(g('f_w')) || 0;
+  if (!name) return fail('Подскажи, как тебя зовут');
+  if (!(height >= 140 && height <= 220)) return fail('Рост: число от 140 до 220');
+  if (!(weight >= 40 && weight <= 200)) return fail('Вес: число от 40 до 200');
+  if (!S.profile.gender) return fail('Выбери пол');
+  if (!S.profile.build) return fail('Выбери телосложение');
+  if (!g('f_top') || !g('f_pa') || !g('f_sh')) return fail('Заполни все три размера');
   Object.assign(S.profile, {
-    name: g('f_name') || 'Артём', height: +g('f_h') || 190, weight: +g('f_w') || 85,
-    topSize: g('f_top') || 'L', pantsSize: g('f_pa') || '32', shoeSize: g('f_sh') || '43'
+    name, height, weight,
+    topSize: g('f_top'), pantsSize: g('f_pa'), shoeSize: g('f_sh')
   });
   if (S.done) {
     save();
@@ -493,8 +502,8 @@ function vHome() {
   const w = S.ctx.weather;
   return `<div class="wrap">
     <div class="row"><div class="grow"><div class="hello" id="seasonline">${seasonText()}${w && w.city ? ` · ${esc(w.city)}` : ''}</div>
-    <h1 class="title">Привет, ${esc(p.name)}</h1></div>
-    ${S.photo ? `<img class="avatar" src="${S.photo}" onclick="go('profile')" alt="Профиль">` : `<button class="avatar" onclick="go('profile')">${esc((p.name || 'А')[0])}</button>`}</div>
+    <h1 class="title">Привет${p.name ? ', ' + esc(p.name) : ''}!</h1></div>
+    ${S.photo ? `<img class="avatar" src="${S.photo}" onclick="go('profile')" alt="Профиль">` : `<button class="avatar" onclick="go('profile')">${esc((p.name || '?')[0])}</button>`}</div>
 
     <div class="ai">
       <div class="ai-head"><span class="ai-ava2">${spark(13)}</span>Стилист ${S.aiModel ? `<span class="model">· ${esc(S.aiModel)}</span>` : ''}<button class="newchat" onclick="newChat()" aria-label="Новый диалог">${ic('plus', 16)}</button></div>
@@ -1088,14 +1097,24 @@ function defaultStateFresh() {
     feed: { title: 'Для тебя', items: [], total: 0 },
     feedOutfits: [], gapItems: [], wardrobe: { items: [], insights: null },
     ctx: { season: 'autumn', weather: null },
-    ob: { styles: ['smart', 'minimal'] },
+    ob: { styles: [] }, greeted: false,
     token: tok, login: '', authMode: 'login', authErr: ''
   };
 }
 
 /* route side-effects */
 const __render = render;
+function seedGreeting() {
+  if (S.greeted || S.chat.length) return;
+  S.greeted = true;
+  S.chat.push({
+    role: 'ai', id: 'm-hello', t: Date.now(),
+    text: `Привет${S.profile.name ? ', ' + S.profile.name : ''}! Я твой AI-стилист. Могу подобрать вещи под твой вкус и бюджет, собрать готовый образ, найти похожее по фото и объяснить, почему вещь тебе подойдёт. Просто напиши, что ищем — например: «куртка на осень».`
+  });
+  save();
+}
 render = function () {
+  if (S.route === 'home') seedGreeting();
   __render();
   if (S.route === 'product') window.__loadProduct(S.params.id);
   if (S.route === 'favorites') window.__loadFav();
