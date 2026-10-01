@@ -200,6 +200,7 @@ function render() {
   const tabs = $('#tabs');
   tabs.hidden = !main;
   $('#app').classList.toggle('notabs', !main);
+  document.querySelector('.stage').className = 'stage route-' + S.route;
   if (main) tabs.innerHTML = TABS.map(([r, t, i]) => `<button class="tab ${S.route === r ? 'on' : ''}" onclick="go('${r}')" aria-label="${t}">${ic(i, 24)}${t}</button>`).join('');
   if (S.route === 'analyzing') runAnalyzing();
   if (S.route === 'home') { loadCtx(); scrollMsgs(); }
@@ -768,6 +769,7 @@ function renderDemoProduct(p, rv, id) {
     el.innerHTML = `
       <div class="gal" style="margin:14px -20px 0;position:relative">${IM(p.img, p.title)}
         <button class="iconbtn l" style="position:absolute;top:14px;left:14px" onclick="go('home')" aria-label="Назад">${ic('back', 19)}</button></div>
+      <div class="pinfo">
       <div class="row" style="margin-top:14px"><div class="grow"><span class="small muted">${p.mp === 'WB' ? 'Wildberries' : 'Ozon'} · ${ic('star', 12)} ${p.rating}</span></div>
       <button class="iconbtn favbtn ${fav ? 'on' : ''}" onclick="fav('${p.id}')" aria-label="В избранное" style="${fav ? 'color:#E11D48' : ''}">${ic('heart', 19)}</button>
       <button class="iconbtn" onclick="shareProduct('${p.id}')" aria-label="Поделиться" style="margin-left:8px">${ic('share', 18)}</button></div>
@@ -783,7 +785,7 @@ function renderDemoProduct(p, rv, id) {
       ${rv && rv.data ? `<div class="field"><label>Отзывы · ${rv.data.count}</label></div><p class="sub">Часто хвалят: ${(rv.data.reviews || []).filter((r) => r.rating >= 5).slice(0, 2).map((r) => esc(r.text.split('.')[0].toLowerCase())).join('; ') || '—'}.</p>` : ''}
       <div style="height:170px"></div>
       <div class="cta"><button class="btn" onclick="market('${p.id}')">Открыть в магазине ${ic('upRight', 16)}</button>
-      <button class="btn secondary" onclick="dislike('${p.id}')">Не моё</button></div>`;
+      <button class="btn secondary" onclick="dislike('${p.id}')">Не моё</button></div></div>`;
     el.querySelectorAll('.size').forEach((b) => b.onclick = () => { el.querySelectorAll('.size').forEach((x) => x.classList.remove('on')); b.classList.add('on'); });
 }
 /* Живой товар WB: рендерим из кеша, отзывы не выдумываем. */
@@ -800,8 +802,9 @@ function renderLiveProduct(p) {
   ];
   el.innerHTML = `
     <div class="gal" style="margin:14px -20px 0;position:relative">${IM(p.img, p.title)}
-      <button class="iconbtn l" style="position:absolute;top:14px;left:14px" onclick="go('home')" aria-label="Назад">${ic('back', 19)}</button></div>
-    <div class="row" style="margin-top:14px"><div class="grow"><span class="livelabel"><span class="livedot"></span>Live · Wildberries</span></div>
+        <button class="iconbtn l" style="position:absolute;top:14px;left:14px" onclick="go('home')" aria-label="Назад">${ic('back', 19)}</button></div>
+      <div class="pinfo">
+      <div class="row" style="margin-top:14px"><div class="grow"><span class="livelabel"><span class="livedot"></span>Live · Wildberries</span></div>
     <button class="iconbtn ${fav ? 'on' : ''}" onclick="fav('${p.id}')" aria-label="В избранное" style="${fav ? 'color:#E11D48' : ''}">${ic('heart', 19)}</button></div>
     <h1 style="font-size:21px;margin-top:6px">${esc(p.title)}</h1>
     <div class="price">${fmt(p.price)}<s>${fmt(p.old)}</s></div>
@@ -811,7 +814,7 @@ function renderLiveProduct(p) {
     <div class="why">${rows.map(([t, v, d]) => `<div class="whyrow"><div><b>${t}</b><span>${d}</span></div><span class="n">${v == null ? '—' : v}</span></div>`).join('')}</div>
     <p class="sub">Отзывы и точное наличие — на странице товара в магазине, мы их не копируем.</p>
     <div style="height:150px"></div>
-    <div class="cta"><button class="btn" onclick="market('${p.id}')">Купить на Wildberries ${ic('upRight', 16)}</button></div>`;
+    <div class="cta"><button class="btn" onclick="market('${p.id}')">Купить на Wildberries ${ic('upRight', 16)}</button></div></div>`;
 }
 function shareUrl(p) {
   if (p.live && p.url) return p.url;

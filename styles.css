@@ -107,6 +107,34 @@ img{max-width:100%}
   .hero-full h1{font-size:36px}
   .chip{padding:10px 13px;font-size:13px}
 }
+
+/* ===== Desktop: полноценная ПК-версия ===== */
+@media(min-width:960px){
+  .stage{max-width:1180px;flex-direction:row}
+  #app{padding-bottom:24px}
+  .tabs{position:static;flex-direction:column;justify-content:flex-start;width:216px;flex-shrink:0;padding:22px 12px;gap:4px;border-top:none;border-right:1px solid var(--line);border-radius:0}
+  .tab{flex-direction:row;justify-content:flex-start;gap:12px;font-size:14px;padding:13px 16px;border-radius:14px;min-height:48px;white-space:nowrap}
+  .tab.on{background:#EFEFEC}
+  .wrap{max-width:780px;margin:0 auto}
+  .feed{grid-template-columns:repeat(3,1fr);gap:18px 16px}
+  .hero-full h1{font-size:56px}
+  .hero-full .body{max-width:640px;padding:30px 40px 40px}
+  .hero-full .top{padding-top:28px}
+  /* карточка товара: галерея слева, инфо справа */
+  .route-product .wrap{max-width:1060px}
+  .route-product #pbody{display:grid;grid-template-columns:1.05fr 1fr;gap:28px;align-items:start}
+  .pinfo{min-width:0}
+  .route-product .sheet{padding:0}
+  .gal img{height:560px;border-radius:24px}
+  .route-product .gal{margin:0!important}
+  .route-product .cta{position:static;background:none;padding:18px 0 0}
+  /* чат шире */
+  .route-home .wrap{max-width:860px}
+  .msgs{max-height:420px}
+  /* образы и гардероб шире */
+  .route-outfits .wrap,.route-wardrobe .wrap,.route-favorites .wrap{max-width:900px}
+  .ocollage img{height:220px}
+}
 .msgs::-webkit-scrollbar{display:none}
 .mrow{display:flex;gap:8px;align-items:flex-end;animation:up .3s}
 .mrow.me{justify-content:flex-end}
