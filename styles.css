@@ -107,50 +107,6 @@ img{max-width:100%}
   .hero-full h1{font-size:36px}
   .chip{padding:10px 13px;font-size:13px}
 }
-
-/* ===== Desktop: как WB/Ozon — на всю ширину ===== */
-@media(min-width:960px){
-  body{display:block}
-  .stage{max-width:none;margin:0;border-radius:0;min-height:100vh;max-height:none;flex-direction:row;box-shadow:none}
-  #app{padding-bottom:24px}
-  .tabs{position:sticky;top:0;height:100vh;flex-direction:column;justify-content:flex-start;width:224px;flex-shrink:0;padding:22px 12px;gap:4px;border-top:none;border-right:1px solid var(--line);border-radius:0}
-  .tab{flex-direction:row;justify-content:flex-start;gap:12px;font-size:14px;padding:13px 16px;border-radius:14px;min-height:48px;white-space:nowrap;flex:none}
-  .tab.on{background:#EFEFEC}
-  .wrap{max-width:1240px;margin:0 auto;padding-left:28px;padding-right:28px}
-  .feed{grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:20px 16px}
-  .hero-full h1{font-size:60px}
-  .hero-full .body{max-width:1240px;margin-left:auto;margin-right:auto;width:100%;padding:30px 28px 44px}
-  .hero-full .top{padding-top:28px}
-  /* карточка товара: галерея слева, инфо справа */
-  .route-product .wrap{max-width:1240px}
-  .route-product #pbody{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:32px;align-items:start}
-  .pinfo{min-width:0}
-  .route-product .sheet{padding:0}
-  .gal img{height:600px;border-radius:24px}
-  .route-product .gal{margin:0!important}
-  .route-product .cta{position:static;background:none;padding:18px 0 0}
-  /* чат шире */
-  .route-home .wrap{max-width:900px}
-  .msgs{max-height:480px}
-  /* формы уже: вход, онбординг, приватность */
-  .route-auth .wrap,.route-photo .wrap,.route-params .wrap,.route-style .wrap,.route-analyzing .wrap,.route-privacy .wrap{max-width:560px}
-  .route-wardrobe .wrap{max-width:760px}
-  /* образы и гардероб шире */
-  .route-outfits .wrap,.route-favorites .wrap{max-width:1240px}
-  .ocollage img{height:220px}
-  /* липкая галерея как на маркетах */
-  .route-product .gal{position:sticky;top:24px}
-}
-/* мышь: ховеры только где есть курсор */
-@media(min-width:960px) and (hover:hover){
-  .btn:hover{filter:brightness(1.08)}
-  .card:hover .ph img{transform:scale(1.03)}
-  .card .ph img{transition:transform .35s ease}
-  .tab:hover:not(.on){background:#F4F4F2}
-  .chip:hover{border-color:#C9C9C9}
-  .qchips button:hover{background:#E2E2DE}
-  .prow:hover{background:#F7F7F5}
-}
 .msgs::-webkit-scrollbar{display:none}
 .mrow{display:flex;gap:8px;align-items:flex-end;animation:up .3s}
 .mrow.me{justify-content:flex-end}
