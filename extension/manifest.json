@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "Стилист — сохранить товар",
+  "version": "1.0.0",
+  "description": "В один клик отправляет товар с Wildberries/Ozon в твою базу AI-стилиста.",
+  "permissions": ["storage", "activeTab", "scripting"],
+  "host_permissions": [
+    "https://www.wildberries.ru/*",
+    "https://www.ozon.ru/*",
+    "https://ai-stylist-u58z.onrender.com/*",
+    "http://127.0.0.1:8001/*"
+  ],
+  "action": {
+    "default_title": "Сохранить товар в Стилист",
+    "default_popup": "popup.html"
+  }
+}

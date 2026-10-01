@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<style>
+  body { width: 300px; margin: 0; padding: 16px; font-family: -apple-system, 'Segoe UI', sans-serif; color: #0A0A0A; }
+  h1 { font-size: 16px; margin: 0 0 4px; }
+  p.sub { font-size: 12px; color: #86868B; margin: 0 0 12px; }
+  label { display: block; font-size: 11px; font-weight: 600; color: #86868B; margin: 10px 0 4px; }
+  input { width: 100%; box-sizing: border-box; border: 1.5px solid #ECECEE; border-radius: 10px; padding: 9px 11px; font-size: 13px; outline: none; }
+  input:focus { border-color: #2E5BFF; }
+  button { width: 100%; border: none; border-radius: 12px; padding: 12px; font-size: 14px; font-weight: 700; cursor: pointer; margin-top: 10px; }
+  .primary { background: linear-gradient(120deg, #FF2EA6, #2E5BFF); color: #fff; }
+  .ghost { background: #F1F1F4; color: #0A0A0A; }
+  #status { font-size: 12px; margin-top: 10px; line-height: 1.5; }
+  #status.ok { color: #1c7a33; }
+  #status.err { color: #c41e1e; }
+  #preview { display: flex; gap: 10px; margin-top: 12px; align-items: center; }
+  #preview img { width: 52px; height: 52px; border-radius: 10px; object-fit: cover; background: #F1F1F4; }
+  #preview b { font-size: 13px; display: block; }
+  #preview span { font-size: 12px; color: #86868B; }
+  .row { display: flex; gap: 8px; }
+</style>
+</head>
+<body>
+  <h1>Стилист · сохранить товар</h1>
+  <p class="sub" id="who">Войди своим логином из приложения.</p>
+  <div id="authbox">
+    <label>Сервер</label>
+    <input id="f_base" placeholder="https://…">
+    <label>Логин</label>
+    <input id="f_login" autocomplete="username">
+    <label>Пароль</label>
+    <input id="f_pass" type="password" autocomplete="current-password">
+    <button class="primary" id="b_login">Войти</button>
+  </div>
+  <div id="mainbox" style="display:none">
+    <div id="preview"><img id="p_img" alt=""><div><b id="p_title">…</b><span id="p_price"></span></div></div>
+    <button class="primary" id="b_save">Сохранить в базу</button>
+    <div class="row"><button class="ghost" id="b_reload" style="flex:1">Перечитать</button><button class="ghost" id="b_logout" style="flex:1">Выйти</button></div>
+  </div>
+  <div id="status"></div>
+  <script src="popup.js"></script>
+</body>
+</html>
