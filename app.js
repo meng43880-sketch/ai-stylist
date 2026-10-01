@@ -527,7 +527,7 @@ function cardHtml(p, i) {
   return `<button class="card" onclick="go('product',{id:'${p.id}'})">
     <span class="ph">${IM(p.img, p.title)}
     <span class="fav ${fav ? 'on' : ''}" onclick="event.stopPropagation();fav('${p.id}')" role="button" aria-label="В избранное">${ic('heart', 16)}</span></span>
-    <h3 class="ct">${esc(p.title)}</h3><span class="pr">${fmt(p.price)}<s>${fmt(p.old)}</s></span>
+    <span class="ct">${esc(p.title)}</span><span class="pr">${fmt(p.price)}<s>${fmt(p.old)}</s></span>
     <span class="mt2">${p.mp === 'WB' ? 'WB' : 'Ozon'} · ★ ${p.rating || '—'} · ${rc}</span>
     ${p.live ? `<span class="mt live"><span class="livedot"></span>Live · ${p.aiScore}% · WB</span>` : `<span class="mt">${p.aiScore}% тебе подходит</span>`}</button>`;
 }
