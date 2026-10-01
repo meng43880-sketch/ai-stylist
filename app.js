@@ -199,6 +199,7 @@ function render() {
   const main = ['home', 'outfits', 'wardrobe', 'favorites', 'profile'].includes(S.route);
   const tabs = $('#tabs');
   tabs.hidden = !main;
+  $('#app').classList.toggle('notabs', !main);
   if (main) tabs.innerHTML = TABS.map(([r, t, i]) => `<button class="tab ${S.route === r ? 'on' : ''}" onclick="go('${r}')" aria-label="${t}">${ic(i, 24)}${t}</button>`).join('');
   if (S.route === 'analyzing') runAnalyzing();
   if (S.route === 'home') { loadCtx(); scrollMsgs(); }

@@ -14,8 +14,9 @@ body{background:#EFEFF2;font-family:var(--font);color:var(--ink);min-height:100v
 .stage{position:relative;width:100%;max-width:430px;min-height:100vh;background:var(--bg);display:flex;flex-direction:column;box-shadow:0 30px 80px rgba(0,0,0,.12);overflow:hidden}
 @media(min-width:520px){.stage{margin:24px 0;border-radius:44px;min-height:calc(100vh - 48px);max-height:calc(100vh - 48px)}}
 .app{flex:1;overflow-y:auto;overflow-x:hidden;padding-bottom:120px;scrollbar-width:none}
+.app.notabs{padding-bottom:24px}
 .app::-webkit-scrollbar{display:none}
-.screen{animation:up .35s cubic-bezier(.2,.8,.25,1)}
+.screen{animation:up .35s cubic-bezier(.2,.8,.25,1);display:flex;flex-direction:column;min-height:100%}
 @keyframes up{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 @keyframes dots{0%,100%{opacity:.25}50%{opacity:1}}
 .wrap{padding:20px 20px 0}
@@ -48,7 +49,7 @@ h1,h2,h3,p{margin:0}
 .chip.on{background:var(--ink);border-color:var(--ink);color:#fff}
 
 /* welcome hero: фото на весь экран, текст и кнопки поверх */
-.hero-full{position:relative;min-height:92vh;min-height:92dvh;display:flex;flex-direction:column;overflow:hidden;background:#0A0A0A;margin-bottom:-120px}
+.hero-full{position:relative;flex:1;display:flex;flex-direction:column;overflow:hidden;background:#0A0A0A}
 .hero-full>img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
 .hero-full .shade{position:absolute;inset:0;background:linear-gradient(180deg,rgba(10,10,12,.25) 0%,rgba(10,10,12,0) 30%,rgba(10,10,12,.25) 55%,rgba(10,10,12,.88) 100%)}
 .hero-full .shade::after{content:'';position:absolute;inset:0;background:linear-gradient(120deg,rgba(255,46,166,.18),rgba(46,91,255,.18));mix-blend-mode:overlay}
@@ -98,7 +99,14 @@ h1,h2,h3,p{margin:0}
 .ai-head .model{font-size:11px;color:var(--muted);font-weight:500}
 .ai-head .newchat{margin-left:auto;width:34px;height:34px;border-radius:50%;background:none;border:none;color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center}
 .ai-head .newchat:active{transform:scale(.92)}
-.msgs{display:flex;flex-direction:column;gap:12px;margin-top:12px;max-height:380px;overflow-y:auto;scrollbar-width:none}
+.msgs{display:flex;flex-direction:column;gap:12px;margin-top:12px;max-height:380px;max-height:38dvh;overflow-y:auto;scrollbar-width:none}
+img{max-width:100%}
+@media(max-width:360px){
+  .input,select.input{padding:12px 10px;font-size:15px}
+  .title{font-size:24px}
+  .hero-full h1{font-size:36px}
+  .chip{padding:10px 13px;font-size:13px}
+}
 .msgs::-webkit-scrollbar{display:none}
 .mrow{display:flex;gap:8px;align-items:flex-end;animation:up .3s}
 .mrow.me{justify-content:flex-end}
