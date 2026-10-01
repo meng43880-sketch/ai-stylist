@@ -35,7 +35,8 @@ const P = {
   trash: '<path d="M4 7h16M9.5 7V5a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v2M6.5 7l1 13a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1l1-13"/>',
   upRight: '<path d="M7 17 17 7M9 7h8v8"/>',
   camera: '<path d="M4 8h3l2-2.5h6L17 8h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/>',
-  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5 5l1.8 1.8M17.2 17.2 19 19M19 5l-1.8 1.8M6.8 17.2 5 19"/>'
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5 5l1.8 1.8M17.2 17.2 19 19M19 5l-1.8 1.8M6.8 17.2 5 19"/>',
+  shield: '<path d="M12 3l7.5 3v5.5c0 4.5-3.2 7.6-7.5 9-4.3-1.4-7.5-4.5-7.5-9V6z"/><path d="M9 12l2 2 4-4"/>'
 };
 const ic = (n, s) => `<svg width="${s || 20}" height="${s || 20}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[n] || ''}</svg>`;
 function spark(size) { return ic('spark', size || 13); }
@@ -231,18 +232,31 @@ function vAuth() {
     <p class="sub">${reg ? 'Логин и пароль — вещи, лента и вкусы привяжутся к тебе.' : 'Войди, чтобы продолжить с того же места.'}</p>
     <div class="chips" style="margin-top:16px"><button class="chip ${!reg ? 'on' : ''}" onclick="authTab('login')">Вход</button><button class="chip ${reg ? 'on' : ''}" onclick="authTab('register')">Регистрация</button></div>
     <div class="field"><label>Логин · латиница, цифры, _</label><input class="input" id="a_login" autocomplete="username" value="${esc(S.login || '')}" maxlength="20"></div>
-    <div class="field"><label>Пароль · минимум 6 символов</label><input class="input" id="a_pass" type="password" autocomplete="${reg ? 'new-password' : 'current-password'}"></div>
+    <div class="field"><label>Пароль · минимум 6 символов</label><input class="input" id="a_pass" type="password" autocomplete="${reg ? 'new-password' : 'current-password'}" value="${esc(DRAFT_PASS)}"></div>
+    ${reg ? `<button class="agree" onclick="togAgree()" aria-label="Согласие">
+      <span class="box ${S.agree ? 'on' : ''}">${S.agree ? ic('check', 13) : ''}</span>
+      <span>Я ознакомился с <a onclick="event.stopPropagation();go('privacy')">политикой конфиденциальности</a> и согласен на обработку данных</span>
+    </button>` : ''}
     ${S.authErr ? `<div class="note" style="background:#FDECEA;color:#8f1d12">${esc(S.authErr)}</div>` : ''}
     <div style="height:16px"></div>
     <button class="btn" onclick="authSubmit()">${reg ? 'Зарегистрироваться' : 'Войти'}</button>
     <div style="height:22px"></div></div>`;
 }
-window.authTab = function (m) { S.authMode = m; S.authErr = ''; render(); };
+window.authTab = function (m) { stashDraft(); S.authMode = m; S.authErr = ''; render(); };
+let DRAFT_PASS = '';
+function stashDraft() {
+  const l = document.getElementById('a_login'), p = document.getElementById('a_pass');
+  if (l) S.login = l.value;
+  if (p) DRAFT_PASS = p.value;
+}
+window.togAgree = function () { stashDraft(); S.agree = !S.agree; render(); };
 window.authSubmit = async function () {
   const login = (($('#a_login') || {}).value || '').trim();
   const pass = (($('#a_pass') || {}).value || '');
+  DRAFT_PASS = pass; S.login = login;
   if (!/^[a-zA-Z0-9_]{3,20}$/.test(login)) { S.authErr = 'Логин: 3–20 символов, латиница, цифры и _'; render(); return; }
   if (pass.length < 6) { S.authErr = 'Пароль: минимум 6 символов'; render(); return; }
+  if (S.authMode === 'register' && !S.agree) { S.authErr = 'Поставь галочку согласия с политикой конфиденциальности'; render(); return; }
   S.authErr = ''; render();
   try {
     const r = await Api.post(S.authMode === 'register' ? '/api/auth/register' : '/api/auth/login', { login, password: pass });
@@ -1003,9 +1017,10 @@ window.wDel = async function (id) {
 };
 
 /* ---------- privacy ---------- */
+window.privBack = function () { go(S.token ? 'profile' : 'auth'); };
 function vPrivacy() {
   return `<div class="wrap">
-    <div class="row"><button class="iconbtn" onclick="go('profile')" aria-label="Назад">${ic('back', 19)}</button>
+    <div class="row"><button class="iconbtn" onclick="privBack()" aria-label="Назад">${ic('back', 19)}</button>
     <div class="grow"><h1 class="title" style="font-size:24px">Конфиденциальность</h1></div></div>
     <div class="kv"><span>Профиль и параметры</span></div>
     <p class="sub">Хранятся в твоём браузере и на сервере приложения только для подборок. Никому не передаются.</p>
@@ -1071,7 +1086,7 @@ function vProfile() {
       <button class="prow" onclick="go('params')"><span class="tint">${ic('sliders', 18)}</span><span>Мои параметры<small>Рост, размеры</small></span>${ic('chevR', 16)}</button>
     </div>
     <div class="pgroup"><div class="ptitle">Аккаунт</div>
-      <button class="prow" onclick="go('privacy')"><span class="tint">${ic('info', 18)}</span><span>Конфиденциальность</span>${ic('chevR', 16)}</button>
+      <button class="prow" onclick="go('privacy')"><span class="tint">${ic('shield', 18)}</span><span>Конфиденциальность</span>${ic('chevR', 16)}</button>
       <button class="prow" onclick="logout()"><span class="tint">${ic('user', 18)}</span><span>Выйти<small>${esc(S.login || '')}</small></span>${ic('chevR', 16)}</button>
     </div>
     <div class="pgroup danger">

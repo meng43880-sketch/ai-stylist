@@ -259,5 +259,9 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 .taste .row svg{flex-shrink:0}
 .pgroup.danger .prow{color:#D81E1E;border:none}
 .pgroup.danger .prow:first-of-type{border-top:1px solid var(--line)}
+.agree{display:flex;gap:11px;align-items:flex-start;width:100%;background:none;border:none;cursor:pointer;font-family:var(--font);font-size:13px;line-height:1.5;color:var(--muted);text-align:left;padding:4px 0;margin-top:14px;min-height:44px}
+.agree .box{width:22px;height:22px;border-radius:8px;border:1.5px solid var(--line);background:var(--card);display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#fff;margin-top:1px}
+.agree .box.on{background:var(--grad);border-color:transparent}
+.agree a{color:var(--ink);font-weight:700;text-decoration:underline}
 .ocollage{display:grid;grid-template-columns:1fr 1fr;gap:8px;border-radius:var(--r);overflow:hidden}
 .ocollage img{width:100%;height:170px;object-fit:cover;display:block}
