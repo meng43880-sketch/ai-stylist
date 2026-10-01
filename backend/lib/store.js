@@ -32,9 +32,10 @@ let flushT = null;
 
 async function init() {
   if (!PG_URL) { console.log('store: JSON mode (db.json)'); return; }
+  const cleanUrl = PG_URL.replace(/([?&])channel_binding=[^&]*/i, '$1').replace(/[?&]$/, '');
   let pg;
   try { pg = require('pg'); } catch (e) { throw new Error('DATABASE_URL задан, но пакет pg не установлен: cd backend && npm install'); }
-  pool = new pg.Pool({ connectionString: PG_URL, ssl: { rejectUnauthorized: false }, max: 3 });
+  pool = new pg.Pool({ connectionString: cleanUrl, ssl: { rejectUnauthorized: false }, max: 3 });
   await pool.query(`CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY, login TEXT UNIQUE NOT NULL, hash TEXT NOT NULL, created_at BIGINT);
     CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY, user_id TEXT NOT NULL, created_at BIGINT);
     CREATE TABLE IF NOT EXISTS user_data(user_id TEXT PRIMARY KEY, data JSONB NOT NULL);
