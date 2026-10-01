@@ -157,7 +157,12 @@ async function route(req, res) {
     /* --- products --- */
     const pm = p.match(/^\/api\/products\/([a-z0-9]+)(\/reviews|\/analysis|\/explanation|\/availability)?$/i);
     if (m === 'GET' && pm) {
-      const prod = C.DemoProductProvider.getById(pm[1]);
+      let prod = C.DemoProductProvider.getById(pm[1]);
+      if (!prod && String(pm[1]).startsWith('ds')) {
+        const D = require('./lib/datasets');
+        const rows = await D.ensureLoaded().catch(() => []);
+        prod = rows.find((x) => x.id === pm[1]) || null;
+      }
       if (pm[2] === '/explanation') return send(res, 200, { ok: true, data: await O.explainProduct(pm[1], null, uid) });
       if (pm[2] === '/availability') {
         const service = new M.MarketplaceService();
@@ -166,7 +171,10 @@ async function route(req, res) {
         return send(res, 200, { ok: true, data: Object.assign({ productId: pm[1] }, av) });
       }
       if (!prod) return send(res, 404, { ok: false, error: 'Товар не найден' });
-      if (pm[2] === '/reviews') return send(res, 200, { ok: true, data: C.getReviews(pm[1]) });
+      if (pm[2] === '/reviews') {
+        if (String(pm[1]).startsWith('ds')) return send(res, 200, { ok: true, data: { productId: pm[1], source: 'dataset', rating: prod.rating, count: prod.reviews, reviews: [], note: 'Тексты отзывов в открытом датасете отсутствуют — смотри рейтинг и число оценок, детали на странице WB.' } });
+        return send(res, 200, { ok: true, data: C.getReviews(pm[1]) });
+      }
       if (pm[2] === '/analysis') return send(res, 200, { ok: true, data: await O.productAnalysis(pm[1]) });
       const r = R.scoreProduct(prod, O.scoreCtx(profile(U), feedback(U), { wardrobe: U.wardrobe }));
       return send(res, 200, { ok: true, product: Object.assign({}, prod, { aiScore: r.score, aiParts: r.parts, url: C.mpSearchUrl(prod) }) });

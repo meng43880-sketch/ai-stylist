@@ -749,6 +749,7 @@ function renderDemoProduct(p, rv, id) {
       <h1 style="font-size:21px;margin-top:6px">${esc(p.title)}</h1>
       <div class="price">${fmt(p.price)}<s>${fmt(p.old)}</s></div>
       <p class="sub">${esc(p.desc || '')}</p>
+      ${p.dataset ? `<p class="sub" style="font-size:12px">Открытые данные WB (дек 2024): цена и наличие могли измениться — проверь на странице товара.</p>` : ''}
       <div class="field"><label>Размер · твой ${esc(need)}</label></div>
       <div class="sizes">${p.sizes.map((s) => `<button class="size ${String(s) === String(need) ? 'on' : ''}">${s}</button>`).join('')}</div>
       <div class="note"><b>${p.aiScore}% тебе подходит.</b> Почему — ниже.</div>
@@ -826,7 +827,7 @@ window.shareOutfit = async function (id) {  const o = findOutfit(id); if (!o) re
 window.market = async function (id) {
   const p = RC[id]; if (!p) return;
   let raw;
-  if (p.live && p.url) raw = p.url;
+  if (p.url) raw = p.url;
   else {
     const q = encodeURIComponent(p.title);
     raw = p.mp === 'WB' ? `https://www.wildberries.ru/catalog/0/search.aspx?search=${q}` : `https://www.ozon.ru/search/?text=${q}`;
@@ -834,10 +835,10 @@ window.market = async function (id) {
   try {
     const r = await Api.get('/api/market/link?mp=' + p.mp + '&u=' + encodeURIComponent(raw));
     window.open(r.data.url, '_blank');
-    toast(r.data.affiliate ? 'Открываем магазин (партнёрская ссылка)' : (p.live ? 'Открываем реальную карточку' : 'Открываем поиск в магазине'));
+    toast(r.data.affiliate ? 'Открываем магазин (партнёрская ссылка)' : (p.live ? 'Открываем реальную карточку' : (p.dataset ? 'Открываем карточку WB' : 'Открываем поиск в магазине')));
   } catch (e) {
     window.open(raw, '_blank');
-    toast(p.live ? 'Открываем реальную карточку' : 'Открываем поиск в магазине');
+    toast(p.live || p.dataset ? 'Открываем реальную карточку' : 'Открываем поиск в магазине');
   }
 };
 window.fav = async function (id) {

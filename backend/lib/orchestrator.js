@@ -192,13 +192,33 @@ function scoreCtx(profile, feedback, extra) {
 async function searchPipeline({ struct, text, profile, feedback, limit, wardrobe }) {
   // Демо-каталог выключен по умолчанию: только живьё + пустота, без выдумок.
   let list = CFG.demoCatalog ? activeCatalog(struct) : [];
-  const total = list.length;
+  let total = list.length;
   list = list.slice(0, 500);
   const top = R.rankProducts(list, scoreCtx(profile, feedback, { occasion: struct && struct.occasion, wardrobe: wardrobe || [] }));
   let cands = top.slice(0, limit || 20);
   // Обогащаем топ кешированными демо-анализами (без AI-вызовов в демо-режиме)
   const analyses = {};
-  cands.forEach((p) => { analyses[p.id] = C.demoAnalysis(C.DemoProductProvider.getById(p.id)); });
+  cands.forEach((p) => { const d = C.DemoProductProvider.getById(p.id); if (d) analyses[p.id] = C.demoAnalysis(d); });
+  // Открытые датасеты: реальные товары WB, работают без сети маркетплейсов.
+  try {
+    const D = require('./datasets');
+    const rows = await D.ensureLoaded();
+    if (rows.length) {
+      const ds = D.searchRows(rows, {
+        query: text || '', category: struct.category || '',
+        maxPrice: struct.maxPrice || null,
+        colors: struct.color ? [struct.color] : [],
+        limit: 60
+      });
+      const dsCtx = scoreCtx(profile, feedback, { occasion: struct && struct.occasion, wardrobe: wardrobe || [] });
+      const dsRanked = R.rankProducts(ds.items, dsCtx);
+      const seen = new Set(cands.map((x) => x.id));
+      dsRanked.forEach((p) => { if (!seen.has(p.id)) { seen.add(p.id); cands.push(p); } });
+      cands.sort((a, b) => b.aiScore - a.aiScore);
+      cands = cands.slice(0, limit || 20);
+      total += ds.total;
+    }
+  } catch (e) { /* датасет недоступен — идём дальше без него */ }
   let source = CFG.dataSource;
   // hybrid: воронка живья WB (веер × 1 страница, до ~50) → топ-50.
   if (CFG.dataSource === 'hybrid') {

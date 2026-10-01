@@ -256,6 +256,22 @@ class OzonCatalogProvider extends CatalogProvider {
   async search() { await ozonSearchServer(); }
   async getProduct() { await ozonSearchServer(); return null; }
 }
+/* Открытые датасеты (open data): локальные CSV-снимки каталога.
+   Источник честно виден в item.source + datasetDate. */
+class DatasetCatalogProvider extends CatalogProvider {
+  constructor() { super('open-datasets'); }
+  async search(params) {
+    const D = require('./datasets');
+    const rows = await D.ensureLoaded();
+    const r = D.searchRows(rows, params || {});
+    return { items: r.items, total: r.total, source: 'dataset' };
+  }
+  async getProduct(id) {
+    const D = require('./datasets');
+    const rows = await D.ensureLoaded();
+    return rows.find((p) => p.id === id) || null;
+  }
+}
 
 /* ---------- MarketplaceProvider: search/get/reviews/availability ---------- */
 class MarketplaceProvider {
@@ -291,17 +307,28 @@ class DemoMarketplaceProvider extends MarketplaceProvider {
 /* ---------- MarketplaceService: единая точка входа ---------- */
 class MarketplaceService {
   constructor(providers) {
+    const D = require('./datasets');
     this.providers = providers || {
       wildberries: new WildberriesProvider(),
       ozon: new OzonProvider(),
-      demo: new DemoMarketplaceProvider()
+      demo: new DemoMarketplaceProvider(),
+      dataset: new (class extends MarketplaceProvider {
+        constructor() { super('dataset', new DatasetCatalogProvider()); }
+        async getReviews() { return []; }
+        async getAvailability(id) {
+          const p = await this.getProduct(id);
+          return p ? { inStock: null, sizes: p.sizes || [] } : null;
+        }
+      })()
     };
+    this._datasets = D;
   }
   pick(mp) {
     if (!mp || mp === 'all') return Object.values(this.providers);
     if (mp === 'wb' || mp === 'wildberries') return [this.providers.wildberries];
     if (mp === 'ozon') return [this.providers.ozon];
     if (mp === 'demo') return [this.providers.demo];
+    if (mp === 'dataset') return [this.providers.dataset];
     return Object.values(this.providers);
   }
   /* Параллельный поиск + merge + dedupe. Падение одного провайдера
@@ -326,14 +353,17 @@ class MarketplaceService {
   async getProduct(id) {
     if (String(id).startsWith('wb')) return this.providers.wildberries.getProduct(id);
     if (String(id).startsWith('oz')) return this.providers.ozon.getProduct(id);
+    if (String(id).startsWith('ds')) return this.providers.dataset.getProduct(id);
     return this.providers.demo.getProduct(id);
   }
   async getReviews(id) {
     if (String(id).startsWith('wb')) return this.providers.wildberries.getReviews(id);
+    if (String(id).startsWith('ds')) return this.providers.dataset.getReviews(id);
     return this.providers.demo.getReviews(id);
   }
   async getAvailability(id) {
     if (String(id).startsWith('wb')) return this.providers.wildberries.getAvailability(id);
+    if (String(id).startsWith('ds')) return this.providers.dataset.getAvailability(id);
     return this.providers.demo.getAvailability(id);
   }
 }
