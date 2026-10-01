@@ -96,7 +96,7 @@ async function route(req, res) {
       return send(res, 200, { ok: true });
     }
     /* --- status / context --- */
-    if (m === 'GET' && p === '/api/status') return send(res, 200, { ok: true, aiMode: CFG.aiMode, demoMode: CFG.demoMode, dataSource: CFG.dataSource, season: R.currentSeason(), usage: db.usage || {}, providers: { vision: Q.isConfigured(CFG.qwen.vision), stylist: Q.isConfigured(CFG.qwen.stylist), product: Q.isConfigured(CFG.qwen.product) } });
+    if (m === 'GET' && p === '/api/status') return send(res, 200, { ok: true, aiMode: CFG.aiMode, demoMode: CFG.demoMode, dataSource: CFG.dataSource, store: process.env.DATABASE_URL ? 'pg' : 'json', season: R.currentSeason(), usage: db.usage || {}, providers: { vision: Q.isConfigured(CFG.qwen.vision), stylist: Q.isConfigured(CFG.qwen.stylist), product: Q.isConfigured(CFG.qwen.product) } });
     if (m === 'GET' && p === '/api/context') {
       const w = await O.getWeather();
       return send(res, 200, { ok: true, season: R.currentSeason(), weather: w });
