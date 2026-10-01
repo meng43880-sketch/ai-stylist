@@ -108,31 +108,32 @@ img{max-width:100%}
   .chip{padding:10px 13px;font-size:13px}
 }
 
-/* ===== Desktop: полноценная ПК-версия ===== */
+/* ===== Desktop: как WB/Ozon — на всю ширину ===== */
 @media(min-width:960px){
-  .stage{max-width:1180px;flex-direction:row}
+  body{display:block}
+  .stage{max-width:none;margin:0;border-radius:0;min-height:100vh;max-height:none;flex-direction:row;box-shadow:none}
   #app{padding-bottom:24px}
-  .tabs{position:static;flex-direction:column;justify-content:flex-start;width:216px;flex-shrink:0;padding:22px 12px;gap:4px;border-top:none;border-right:1px solid var(--line);border-radius:0}
-  .tab{flex-direction:row;justify-content:flex-start;gap:12px;font-size:14px;padding:13px 16px;border-radius:14px;min-height:48px;white-space:nowrap}
+  .tabs{position:sticky;top:0;height:100vh;flex-direction:column;justify-content:flex-start;width:224px;flex-shrink:0;padding:22px 12px;gap:4px;border-top:none;border-right:1px solid var(--line);border-radius:0}
+  .tab{flex-direction:row;justify-content:flex-start;gap:12px;font-size:14px;padding:13px 16px;border-radius:14px;min-height:48px;white-space:nowrap;flex:none}
   .tab.on{background:#EFEFEC}
-  .wrap{max-width:780px;margin:0 auto}
-  .feed{grid-template-columns:repeat(3,1fr);gap:18px 16px}
-  .hero-full h1{font-size:56px}
-  .hero-full .body{max-width:640px;padding:30px 40px 40px}
+  .wrap{max-width:1240px;margin:0 auto;padding-left:28px;padding-right:28px}
+  .feed{grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:20px 16px}
+  .hero-full h1{font-size:60px}
+  .hero-full .body{max-width:1240px;margin-left:auto;margin-right:auto;width:100%;padding:30px 28px 44px}
   .hero-full .top{padding-top:28px}
   /* карточка товара: галерея слева, инфо справа */
-  .route-product .wrap{max-width:1060px}
-  .route-product #pbody{display:grid;grid-template-columns:1.05fr 1fr;gap:28px;align-items:start}
+  .route-product .wrap{max-width:1240px}
+  .route-product #pbody{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:32px;align-items:start}
   .pinfo{min-width:0}
   .route-product .sheet{padding:0}
-  .gal img{height:560px;border-radius:24px}
+  .gal img{height:600px;border-radius:24px}
   .route-product .gal{margin:0!important}
   .route-product .cta{position:static;background:none;padding:18px 0 0}
   /* чат шире */
-  .route-home .wrap{max-width:860px}
+  .route-home .wrap{max-width:900px}
   .msgs{max-height:420px}
   /* образы и гардероб шире */
-  .route-outfits .wrap,.route-wardrobe .wrap,.route-favorites .wrap{max-width:900px}
+  .route-outfits .wrap,.route-wardrobe .wrap,.route-favorites .wrap{max-width:1240px}
   .ocollage img{height:220px}
 }
 .msgs::-webkit-scrollbar{display:none}
