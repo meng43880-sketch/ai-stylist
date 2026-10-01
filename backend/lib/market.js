@@ -200,6 +200,61 @@ function affLink(mp, url) {
   } catch (e) { return { url, affiliate: false }; }
 }
 
+/* ---------- Community-база: товары делятся пользователями ----------
+   Источник: расширение/вставка вручную — пользователь ЯВНО делится конкретной
+   карточкой (как «сохранить в Pinterest»), никакого silent-скрейпинга.
+   Валидация строгая: только WB/Ozon URL, санитизация полей, лимит/день. */
+const COMMUNITY_PER_DAY = 50;
+function collectItem(uid, b) {
+  const Q = require('./qwen');
+  const store = require('./store');
+  const url = String((b && b.url) || '').slice(0, 300);
+  const mWb = url.match(/wildberries\.ru\/catalog\/(\d+)/);
+  const mOz = url.match(/ozon\.ru\/.*(?:product|p)\/(\d+)/i) || url.match(/ozon\.ru\/product\/[^/]*-(\d+)/i);
+  if (!mWb && !mOz) throw Q.err('BAD_REQUEST', 'Только ссылки на карточки WB или Ozon', 400);
+  const mp = mWb ? 'WB' : 'OZON';
+  const pid = (mWb ? 'wb' : 'oz') + (mWb ? mWb[1] : mOz[1]);
+  const title = String((b && b.title) || '').trim().slice(0, 120);
+  if (!title) throw Q.err('BAD_REQUEST', 'Нужно название товара', 400);
+  const price = Math.round(Number(b && b.price)) || 0;
+  if (!(price > 0 && price < 10000000)) throw Q.err('BAD_REQUEST', 'Нужна корректная цена', 400);
+  const img = String((b && b.img) || '');
+  if (img && !/^https:\/\/[^"'\s<>]{1,500}$/.test(img)) throw Q.err('BAD_REQUEST', 'Некорректная ссылка на фото', 400);
+  store.db.community = store.db.community || {};
+  if (store.db.community[pid]) return { item: stripMeta(store.db.community[pid]), isNew: false };
+  const today = new Date().toDateString();
+  const mine = Object.values(store.db.community).filter((x) => x._meta && x._meta.by === uid && x._meta.day === today).length;
+  if (mine >= COMMUNITY_PER_DAY) throw Q.err('RATE_LIMIT', 'Лимит: 50 товаров в день', 429);
+  const colors = Array.isArray(b.colors) ? b.colors.filter((c) => R_COLORS[c]).slice(0, 2) : [];
+  const sizes = Array.isArray(b.sizes) ? b.sizes.map((s) => String(s).slice(0, 8)).filter(Boolean).slice(0, 8) : ['One'];
+  const rating = Math.max(0, Math.min(5, Number(b.rating) || 0));
+  const D = require('./datasets');
+  const sub = D.guessSub(title);
+  const item = {
+    id: pid, marketplace: mp === 'WB' ? 'wildberries' : 'ozon', marketplaceProductId: pid.slice(2),
+    title, brand: String((b && b.brand) || '').slice(0, 40),
+    cat: wbCat(title), category: wbCat(title), sub,
+    price, oldPrice: price, old: price, currency: 'RUB',
+    img, imageUrl: img, mp,
+    url: url.split('?')[0],
+    rating, reviews: 0, reviewCount: 0,
+    colors, sizes, styles: wbStyles(title), fit: 'regular',
+    availability: { inStock: null, sizes },
+    live: false, community: true, source: 'community',
+    _meta: { by: uid, at: Date.now(), day: today }
+  };
+  store.db.community[pid] = item;
+  store.save();
+  return { item: stripMeta(item), isNew: true };
+}
+function stripMeta(p) { const c = Object.assign({}, p); delete c._meta; return c; }
+const R_COLORS = { black: 1, white: 1, olive: 1, beige: 1, gray: 1, green: 1, blue: 1, brown: 1 };
+function searchCommunity(q) {
+  const store = require('./store');
+  const D = require('./datasets');
+  const rows = Object.values(store.db.community || {}).map(stripMeta);
+  return D.searchRows(rows, q || {});
+}
 /* ---------- CatalogProvider: источник сырых данных ---------- */
 class CatalogProvider {
   constructor(name) { this.catalogName = name; }
@@ -351,6 +406,14 @@ class MarketplaceService {
     return { items: out.slice(0, q.limit || 24), total: out.length, errors };
   }
   async getProduct(id) {
+    try {
+      const store = require('./store');
+      if (store.db.community && store.db.community[id]) {
+        const c = Object.assign({}, store.db.community[id]);
+        delete c._meta;
+        return c;
+      }
+    } catch (e) {}
     if (String(id).startsWith('wb')) return this.providers.wildberries.getProduct(id);
     if (String(id).startsWith('oz')) return this.providers.ozon.getProduct(id);
     if (String(id).startsWith('ds')) return this.providers.dataset.getProduct(id);
@@ -368,4 +431,4 @@ class MarketplaceService {
   }
 }
 
-module.exports = { wbSearchServer, funnelSearch, dedupeLive, ozonSearchServer, normalizeWbItem, scoreLive, structToQuery, structToQueries, wbPhoto, wbUrl, affLink, toModel, CatalogProvider, DemoCatalogProvider, WbPublicCatalogProvider, OzonCatalogProvider, MarketplaceProvider, WildberriesProvider, OzonProvider, DemoMarketplaceProvider, MarketplaceService };
+module.exports = { wbSearchServer, funnelSearch, dedupeLive, ozonSearchServer, normalizeWbItem, scoreLive, structToQuery, structToQueries, wbPhoto, wbUrl, affLink, toModel, collectItem, searchCommunity, CatalogProvider, DemoCatalogProvider, WbPublicCatalogProvider, OzonCatalogProvider, MarketplaceProvider, WildberriesProvider, OzonProvider, DemoMarketplaceProvider, MarketplaceService };

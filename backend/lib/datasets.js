@@ -210,4 +210,4 @@ function searchRows(rows, q) {
   const off = Math.max(0, q.offset || 0);
   return { items: list.slice(off, off + (q.limit || 24)), total };
 }
-module.exports = { SOURCES, ensureLoaded, searchRows, parseCSV, mapRow, get count() { return ROWS ? ROWS.length : 0; } };
+module.exports = { SOURCES, ensureLoaded, searchRows, parseCSV, mapRow, guessSub, get count() { return ROWS ? ROWS.length : 0; } };

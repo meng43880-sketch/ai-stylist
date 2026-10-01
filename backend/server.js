@@ -216,6 +216,17 @@ async function route(req, res) {
       save(); return send(res, 200, { ok: true, favorites: U.favorites });
     }
     if (m === 'GET' && p === '/api/history') return send(res, 200, { ok: true, history: U.history.slice(0, 50) });
+    /* --- community: товары от пользователей (явный шеринг) --- */
+    if (m === 'POST' && p === '/api/collect') {
+      const b = await readBody(req);
+      const r = M.collectItem(uid, b);
+      logHistory('collect', 'Поделился товаром: ' + r.item.title, uid);
+      return send(res, 200, { ok: true, data: r });
+    }
+    if (m === 'GET' && p === '/api/collect/search') {
+      const r = M.searchCommunity({ query: url.searchParams.get('q') || '', limit: Math.min(50, parseInt(url.searchParams.get('limit')) || 20) });
+      return send(res, 200, { ok: true, items: r.items, total: r.total });
+    }
     /* --- market: живые данные --- */
     if (m === 'GET' && p === '/api/market/wb/search') {
       const q = String(url.searchParams.get('q') || '').slice(0, 80);
