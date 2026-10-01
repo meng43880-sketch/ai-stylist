@@ -95,6 +95,15 @@ async function route(req, res) {
       A.logout(b.token || '');
       return send(res, 200, { ok: true });
     }
+    /* --- admin: выдача trusted (только с ADMIN_TOKEN из env) --- */
+    if (p === '/api/admin/trust' && m === 'POST') {
+      const b = await readBody(req);
+      if (!process.env.ADMIN_TOKEN || b.adminToken !== process.env.ADMIN_TOKEN) return send(res, 403, { ok: false, error: 'Нет доступа' });
+      const u = (db.users || []).find((x) => x.login === String(b.login || '').toLowerCase());
+      if (!u) return send(res, 404, { ok: false, error: 'Юзер не найден' });
+      u.trusted = true; save();
+      return send(res, 200, { ok: true, login: u.login, trusted: true });
+    }
     /* --- status / context --- */
     if (m === 'GET' && p === '/api/status') return send(res, 200, { ok: true, aiMode: CFG.aiMode, demoMode: CFG.demoMode, dataSource: CFG.dataSource, season: R.currentSeason(), usage: db.usage || {}, providers: { vision: Q.isConfigured(CFG.qwen.vision), stylist: Q.isConfigured(CFG.qwen.stylist), product: Q.isConfigured(CFG.qwen.product) } });
     if (m === 'GET' && p === '/api/context') {

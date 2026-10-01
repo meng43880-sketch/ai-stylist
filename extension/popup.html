@@ -38,6 +38,13 @@
     <div id="preview"><img id="p_img" alt=""><div><b id="p_title">…</b><span id="p_price"></span></div></div>
     <button class="primary" id="b_save">Сохранить в базу</button>
     <div class="row"><button class="ghost" id="b_reload" style="flex:1">Перечитать</button><button class="ghost" id="b_logout" style="flex:1">Выйти</button></div>
+    <div style="border-top:1px solid #ECECEE;margin-top:14px;padding-top:12px">
+      <b style="font-size:13px">Автопилот выдачи</b>
+      <p class="sub">Открой поиск WB, задай число — соберёт сам, с паузами.</p>
+      <div class="row"><input id="f_target" type="number" value="200" min="10" max="500" style="flex:1"><button class="primary" id="b_go" style="flex:1;margin-top:0">Старт</button></div>
+      <button class="ghost" id="b_stop">Стоп</button>
+      <div id="apstatus" style="font-size:12px;margin-top:8px;color:#86868B"></div>
+    </div>
   </div>
   <div id="status"></div>
   <script src="popup.js"></script>

@@ -86,6 +86,36 @@ $('b_save').onclick = async () => {
   } catch (e) { say('Ошибка: ' + e.message, 'err'); }
 };
 $('b_reload').onclick = () => refresh();
+$('b_go').onclick = async () => {
+  const target = parseInt($('f_target').value) || 200;
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab || !/^https:\/\/(www\.)?wildberries\.ru\//.test(tab.url || '')) { say('Открой поиск или каталог WB', 'err'); return; }
+    await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['content.js'] }).catch(() => {});
+    await chrome.storage.local.set({ ap: { running: true, target, done: 0, errors: 0, page: 1, seen: {}, note: 'Стартую…' } });
+    chrome.tabs.sendMessage(tab.id, { action: 'autopilot', cmd: { target } });
+    say('Автопилот запущен. Вкладку можно свернуть, но не закрывать.', 'ok');
+    pollAp();
+  } catch (e) { say('Не стартовал: ' + e.message, 'err'); }
+};
+async function pollAp() {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab) return;
+    chrome.tabs.sendMessage(tab.id, { action: 'apstate' }, (res) => {
+      const ap = res && res.ap;
+      const el = $('apstatus');
+      if (el && ap) el.textContent = (ap.running ? 'Работаю: ' : 'Стоп: ') + (ap.done || 0) + ' / ' + (ap.target || '?') + (ap.note ? ' · ' + ap.note : '');
+      if (ap && ap.running) setTimeout(pollAp, 2000);
+    });
+  } catch (e) {}
+}
+$('b_stop').onclick = async () => {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tab) chrome.tabs.sendMessage(tab.id, { action: 'autopilot', cmd: { stop: true } });
+  } catch (e) {}
+};
 $('b_logout').onclick = async () => {
   const st = await store();
   try { await api('/api/auth/logout', { method: 'POST', body: JSON.stringify({ token: st.token }) }); } catch (e) {}

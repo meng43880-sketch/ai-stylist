@@ -201,10 +201,11 @@ function affLink(mp, url) {
 }
 
 /* ---------- Community-база: товары делятся пользователями ----------
-   Источник: расширение/вставка вручную — пользователь ЯВНО делится конкретной
-   карточкой (как «сохранить в Pinterest»), никакого silent-скрейпинга.
-   Валидация строгая: только WB/Ozon URL, санитизация полей, лимит/день. */
+   Два режима: ручной клик и автопилот расширения (крутится в браузере
+   пользователя с домашним IP — его WB пускает). Лимит: 50/день обычным,
+   500/день доверенным (trusted ставит владелец через ADMIN_TOKEN). */
 const COMMUNITY_PER_DAY = 50;
+const COMMUNITY_TRUSTED_PER_DAY = 500;
 function collectItem(uid, b) {
   const Q = require('./qwen');
   const store = require('./store');
@@ -223,8 +224,11 @@ function collectItem(uid, b) {
   store.db.community = store.db.community || {};
   if (store.db.community[pid]) return { item: stripMeta(store.db.community[pid]), isNew: false };
   const today = new Date().toDateString();
+  const store2 = require('./store');
+  const me = (store2.db.users || []).find((u) => u.id === uid);
+  const cap = me && me.trusted ? COMMUNITY_TRUSTED_PER_DAY : COMMUNITY_PER_DAY;
   const mine = Object.values(store.db.community).filter((x) => x._meta && x._meta.by === uid && x._meta.day === today).length;
-  if (mine >= COMMUNITY_PER_DAY) throw Q.err('RATE_LIMIT', 'Лимит: 50 товаров в день', 429);
+  if (mine >= cap) throw Q.err('RATE_LIMIT', 'Дневной лимит исчерпан', 429);
   const colors = Array.isArray(b.colors) ? b.colors.filter((c) => R_COLORS[c]).slice(0, 2) : [];
   const sizes = Array.isArray(b.sizes) ? b.sizes.map((s) => String(s).slice(0, 8)).filter(Boolean).slice(0, 8) : ['One'];
   const rating = Math.max(0, Math.min(5, Number(b.rating) || 0));
