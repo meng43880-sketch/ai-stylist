@@ -341,7 +341,12 @@ async function chat({ message, conversationId, profile, feedback, uid, wardrobe,
       const hist = chats[cid].slice(-4).map((m) => ({ role: m.role === 'ai' ? 'assistant' : 'user', content: String(m.text).slice(0, 200) }));
       const rawAnswer = await Q.chatJSON(CFG.qwen.stylist, { system: sys, user: msg + '\nHistory: ' + JSON.stringify(hist), required: [], tag: 'stylist', maxTokens: 350 });
       const answer = normalizeStylist(rawAnswer);
-      const crit = Object.assign({ size: profile.topSize || '' }, answer.searchCriteria || {});
+      /* Страховка: AI иногда возвращает пустые критерии — тогда берём
+         детерминированный разбор сообщения как базу, AI — поверх. */
+      const base = R.nlParse(msg);
+      const aiCrit = answer.searchCriteria || {};
+      const crit = Object.assign({ size: profile.topSize || '' }, base);
+      ['category', 'subcategory', 'color', 'maxPrice', 'style', 'occasion'].forEach((k) => { if (aiCrit[k]) crit[k] = aiCrit[k]; });
       const pipe = await searchPipeline({ struct: crit, profile, feedback, limit: 50, wardrobe: wr });
       let text = answer.message;
       if (!text) {
