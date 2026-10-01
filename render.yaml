@@ -13,12 +13,14 @@ services:
       - key: ZVENO_BASE_URL
         value: https://api.zveno.ai/v1
       - key: ZVENO_MODEL
-        value: dots-studio/dots-3-note-preview:free
+        value: mistralai/mistral-nemo
       - key: QWEN_STYLIST_MODEL
         value: mistralai/mistral-nemo
       - key: QWEN_PRODUCT_MODEL
         value: mistralai/mistral-nemo
       - key: QWEN_VISION_MODEL
-        value: google/gemma-4-31b-it:free
+        value: z-ai/glm-5.3-flash
       - key: ZVENO_API_KEY
+        sync: false
+      - key: DATABASE_URL
         sync: false
