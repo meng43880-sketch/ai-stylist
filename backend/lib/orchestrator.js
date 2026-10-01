@@ -258,11 +258,6 @@ async function searchPipeline({ struct, text, profile, feedback, limit, wardrobe
 }
 
 /* ---------- STYLIST CHAT ---------- */
-const STYLIST_TOOLS = [
-  { type: 'function', function: { name: 'search_products', description: 'Найти товары по структуре', parameters: { type: 'object', properties: { category: { type: 'string' }, color: { type: 'string' }, maxPrice: { type: 'number' }, style: { type: 'string' } } } } },
-  { type: 'function', function: { name: 'build_outfit', description: 'Собрать готовый образ', parameters: { type: 'object', properties: { maxTotal: { type: 'number' } } } } },
-  { type: 'function', function: { name: 'get_weather', description: 'Текущая погода', parameters: { type: 'object', properties: {} } } }
-];
 async function getWeather() {
   const hit = getCache('weather', 'cur', 30 * 60 * 1000);
   if (hit) return hit;

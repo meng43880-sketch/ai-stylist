@@ -265,7 +265,7 @@ window.authSubmit = async function () {
   S.authErr = ''; render();
   try {
     const r = await Api.post(S.authMode === 'register' ? '/api/auth/register' : '/api/auth/login', { login, password: pass });
-    S.token = r.token; S.login = r.login; save();
+    S.token = r.token; S.login = r.login; S._fed = S._ofed = S._wfed = false; save();
     if (S.authMode === 'register') { S.done = false; save(); go('photo'); }
     else await afterLogin();
   } catch (e) { S.authErr = e.message || 'Не получилось. Попробуй ещё раз.'; render(); }
@@ -295,7 +295,7 @@ async function afterLogin() {
 }
 window.logout = async function () {
   try { await Api.post('/api/auth/logout', { token: S.token }); } catch (e) {}
-  S.token = null; S.login = ''; save(); go('auth');
+  S.token = null; S.login = ''; S._fed = S._ofed = S._wfed = false; save(); go('auth');
 };
 function vPhoto() {
   return `<div class="wrap">${dots(1)}
@@ -1107,6 +1107,7 @@ window.wipe = async function () {
   try { localStorage.removeItem('stylist_v3_w'); } catch (e) {}
   const tok = null;
   S = defaultStateFresh();
+  S._fed = S._ofed = S._wfed = false;
   save(); go('welcome');
 };
 function defaultStateFresh() {

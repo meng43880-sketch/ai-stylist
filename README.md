@@ -11,12 +11,15 @@ Mobile-first AI-стилист: фото → анализ → профиль →
 
 ```text
 / (project root = frontend)
-  index.html, styles.css, app.js   # frontend, чистый HTML/CSS/JS
-  .env.example, README.md
+  index.html, styles.css, app.js, demo.js   # frontend, чистый HTML/CSS/JS
+  .env.example, README.md, MARKETPLACE_INTEGRATION.md
+  /archive  # отложенные идеи (не подключено к приложению)
+  Dockerfile, render.yaml, .dockerignore, .gitignore
 /backend
-  package.json, server.js          # HTTP API, zero dependencies, Node 18+
-  /lib  config, store, qwen, catalog, recommend, orchestrator
-  /data db.json                    # создаётся сам (профили, кеш, история)
+  package.json, server.js          # HTTP API, Node 18+ (pg — только для PG-режима)
+  /lib  config, store, qwen, catalog, recommend, orchestrator,
+        market, datasets, auth     # market/datasets/auth — маркетплейсы, данные, вход
+  /data db.json                    # только без DATABASE_URL (dev-режим)
 ```
 
 ## Запуск frontend
@@ -40,7 +43,8 @@ python -m http.server 8000
 
 ```bash
 cd backend
-cp ../.env.example ../.env   # или .env рядом с backend — см. ниже
+cp ../.env.example .env   # пример в корне, сам файл — backend/.env (в git не идёт)
+npm install            # нужен только для PG-режима (пакет pg)
 npm start
 ```
 
@@ -177,8 +181,11 @@ Self-hosted Qwen с OpenAI-совместимым сервером (vLLM/TGI): �
 
 ## API (кратко)
 
-`GET /api/status|/api/context` · `GET/PUT/DELETE /api/profile` ·
-`POST /api/analyze-photo` · `POST /api/search|/api/recommendations` ·
-`POST /api/outfits` · `GET /api/products/:id|/:id/reviews|/:id/analysis` ·
-`POST /api/product-analysis` · `POST /api/ai/chat` · `POST /api/feedback` ·
-`GET/POST /api/favorites` · `GET /api/history`
+`GET /api/status|/api/context` · `POST /api/auth/register|/api/auth/login|/api/auth/logout` ·
+`GET/PUT/DELETE /api/profile` · `POST /api/analyze-photo` ·
+`POST /api/search|/api/recommendations` · `POST /api/outfits` ·
+`GET /api/products/:id|/:id/reviews|/:id/analysis|/:id/explanation|/:id/availability` ·
+`POST /api/product-analysis|/api/products/explanation` · `POST /api/ai/chat` ·
+`POST /api/feedback` · `GET/POST /api/favorites` · `GET /api/history` ·
+`GET/POST/DELETE /api/wardrobe` · `GET /api/market/wb/search|/api/market/ozon/search` ·
+`POST /api/market/score` · `GET /api/market/link`
