@@ -1,4 +1,4 @@
-/* Стилист v3 — минимализм. Главная = чат + лента, они связаны:
+/* sainvio v3 — минимализм. Главная = чат + лента, они связаны:
    ответы AI содержат вещи/образы, одной кнопкой уходят в ленту.
    Каталог и скоринг — backend (/api). Фото и черновики — локально. */
 'use strict';
@@ -158,7 +158,10 @@ const WBClient = {
 };
 
 /* ---------- state ---------- */
-const LS = 'stylist_v3';
+const LS = 'sainvio_v3';
+const LS_LEGACY = 'stylist_v3';
+const LS_W = 'sainvio_v3_w';
+const LS_W_LEGACY = 'stylist_v3_w';
 const STYLES = [['casual', 'Повседневный'], ['smart', 'Smart casual'], ['street', 'Streetwear'], ['minimal', 'Минимализм'], ['sport', 'Спорт'], ['oldmoney', 'Old money'], ['business', 'Деловой'], ['classic', 'Классика'], ['oversize', 'Oversize'], ['party', 'На выход']];
 const SEASON_RU = { spring: 'Весна', summer: 'Лето', autumn: 'Осень', winter: 'Зима' };
 let S = {
@@ -173,7 +176,7 @@ let S = {
   token: null, login: '', authMode: 'login', authErr: ''
 };
 try {
-  const raw = localStorage.getItem(LS);
+  const raw = localStorage.getItem(LS) || localStorage.getItem(LS_LEGACY);
   if (raw) { const p = JSON.parse(raw); if (p) S = Object.assign(S, p); }
 } catch (e) {}
 S.route = (S.done && S.token) ? 'home' : 'welcome'; S.params = {};
@@ -213,10 +216,10 @@ const HERO = 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=
 function dots(n) { return `<div class="stepdot">${[1, 2, 3].map((i) => `<i class="${i <= n ? 'on' : ''}"></i>`).join('')}</div>`; }
 function vWelcome() {
   return `<div class="hero-full screen">
-    ${IM(HERO, 'AI-стилист')}
+    ${IM(HERO, 'sainvio')}
     <div class="shade"></div>
-    <div class="top"><span class="pill">AI-стилист</span></div>
     <div class="body">
+      <div class="brand">sainvio</div>
       <h1>Скажи,<br>что <em>надеть</em></h1>
       <p>Подберём вещи и соберём образы под твою внешность, вкус и бюджет.</p>
       <button class="btn light" onclick="enterApp()">Начать</button>
@@ -232,7 +235,7 @@ window.enterApp = function () {
 function vAuth() {
   const reg = S.authMode === 'register';
   return `<div class="wrap" style="padding-top:64px">
-    <span class="pill">AI-стилист</span>
+    <div class="sbrand">sainvio</div>
     <h1 class="title" style="margin-top:16px">${reg ? 'Создать аккаунт' : 'С возвращением'}</h1>
     <p class="sub">${reg ? 'Логин и пароль — вещи, лента и вкусы привяжутся к тебе.' : 'Войди, чтобы продолжить с того же места.'}</p>
     <div class="chips" style="margin-top:16px"><button class="chip ${!reg ? 'on' : ''}" onclick="authTab('login')">Вход</button><button class="chip ${reg ? 'on' : ''}" onclick="authTab('register')">Регистрация</button></div>
@@ -527,7 +530,7 @@ function vHome() {
     <div id="offlinebar"></div>
 
     <div class="ai">
-      <div class="ai-head"><span class="ai-ava2">${spark(13)}</span>Стилист ${S.aiModel ? `<span class="model">· ${esc(S.aiModel)}</span>` : ''}<button class="newchat" onclick="newChat()" aria-label="Новый диалог">${ic('plus', 16)}</button></div>
+      <div class="ai-head"><span class="ai-ava2">${spark(13)}</span>sainvio ${S.aiModel ? `<span class="model">· ${esc(S.aiModel)}</span>` : ''}<button class="newchat" onclick="newChat()" aria-label="Новый диалог">${ic('plus', 16)}</button></div>
       <div class="msgs" id="msgs">
         ${!S.chat.length ? `<div class="mrow"><span class="ai-ava2">${spark(13)}</span><div class="m ai">Привет! Скажи, что ищем — подберу вещи и соберу образ. Например: «куртка на осень до 7000».</div></div>` : ''}
         ${S.chat.slice(-10).map(msgHtml).join('')}
@@ -936,14 +939,14 @@ async function loadWardrobe() {
     S.wardrobe = { items: r.items || [], insights: r.insights || null };
   } catch (e) {
     try {
-      const raw = localStorage.getItem('stylist_v3_w');
+      const raw = localStorage.getItem(LS_W) || localStorage.getItem(LS_W_LEGACY);
       const items = raw ? JSON.parse(raw) : [];
       S.wardrobe = { items, insights: Demo.insights(items) };
     } catch (de) { S.wardrobe = { items: [], insights: null }; }
   }
 }
 function saveWardrobeLocal() {
-  try { localStorage.setItem('stylist_v3_w', JSON.stringify(S.wardrobe.items)); } catch (e) {}
+  try { localStorage.setItem(LS_W, JSON.stringify(S.wardrobe.items)); } catch (e) {}
 }
 function dot(c) { return `<span class="cdot" style="background:${CDOT[c] || '#ccc'}"></span>`; }
 function vWardrobe() {
@@ -1104,7 +1107,9 @@ window.wipe = async function () {
   if (!confirm('Удалить все мои данные? Фото, профиль, гардероб и история исчезнут безвозвратно.')) return;  try { await Api.req('/api/profile', { method: 'DELETE' }); } catch (e) {}
   try { await Api.post('/api/auth/logout', { token: S.token }); } catch (e) {}
   localStorage.removeItem(LS);
-  try { localStorage.removeItem('stylist_v3_w'); } catch (e) {}
+  try { localStorage.removeItem(LS_LEGACY); } catch (e) {}
+  try { localStorage.removeItem(LS_W); } catch (e) {}
+  try { localStorage.removeItem(LS_W_LEGACY); } catch (e) {}
   const tok = null;
   S = defaultStateFresh();
   S._fed = S._ofed = S._wfed = false;
@@ -1131,7 +1136,7 @@ function seedGreeting() {
   S.greeted = true;
   S.chat.push({
     role: 'ai', id: 'm-hello', t: Date.now(),
-    text: `Привет${S.profile.name ? ', ' + S.profile.name : ''}! Я твой AI-стилист. Могу подобрать вещи под твой вкус и бюджет, собрать готовый образ, найти похожее по фото и объяснить, почему вещь тебе подойдёт. Просто напиши, что ищем — например: «куртка на осень».`
+    text: `Привет${S.profile.name ? ', ' + S.profile.name : ''}! Я sainvio. Могу подобрать вещи под твой вкус и бюджет, собрать готовый образ, найти похожее по фото и объяснить, почему вещь тебе подойдёт. Просто напиши, что ищем — например: «куртка на осень».`
   });
   save();
 }

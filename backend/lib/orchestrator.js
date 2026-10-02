@@ -414,7 +414,7 @@ async function explainProduct(productId, bodyProduct, uid) {
     breakdown: { style: b.style, color: b.color, fit: b.body, size: b.size, budget: b.budget, quality: b.quality },
     factors: ex.factors, reviewSummary: ex.reviewSummary,
     source: p.live ? p.source : 'demo',
-    note: 'Оценки — эвристика AI-стилиста под твой профиль, а не объективная метрика качества.'
+    note: 'Оценки — эвристика sainvio под твой профиль, а не объективная метрика качества.'
   };
 }
 module.exports = { analyzePhoto, productAnalysis, searchPipeline, scoreCtx, chat, getWeather, demoVision, explainProduct };

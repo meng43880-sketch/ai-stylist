@@ -168,7 +168,7 @@ async function ozonSearchServer() {
 
 /* =====================================================================
    PROVIDER LAYER (§1, §15, §18 ТЗ)
-   AI Stylist → MarketplaceService → MarketplaceProvider → CatalogProvider
+   sainvio → MarketplaceService → MarketplaceProvider → CatalogProvider
    AI работает только с нормализованной моделью Product и не знает
    внутренний формат WB/Ozon. Неофициальный доступ — только опциональный
    CatalogProvider, никогда обязательная основа.

@@ -153,7 +153,7 @@ async function loadSource(meta) {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), 60000);
     try {
-      const r = await fetch(meta.url, { signal: ctrl.signal, headers: { 'User-Agent': 'ai-stylist/1.0' } });
+      const r = await fetch(meta.url, { signal: ctrl.signal, headers: { 'User-Agent': 'sainvio/1.0' } });
       if (!r.ok) throw new Error('HTTP ' + r.status);
       text = await r.text();
       fs.writeFileSync(fp, text);

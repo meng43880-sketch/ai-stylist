@@ -1,9 +1,9 @@
-# Твой AI-стилист — персональный подбор одежды
+# sainvio — персональный подбор одежды
 
 > Frontend v3 (минимализм): главная = встроенный AI-чат + лента. Ответы AI со
 > вещами/образами одной кнопкой уходят в ленту. Каталог и скоринг — backend.
 
-Mobile-first AI-стилист: фото → анализ → профиль → персональная лента → образы → магазин.
+Mobile-first sainvio: фото → анализ → профиль → персональная лента → образы → магазин.
 Без ключей работает **демо-режим** (DemoAI + демо-каталог). С ключами в backend `.env` —
 **production AI-режим** (Qwen Vision / Stylist / Product). Ключи во frontend отсутствуют.
 
@@ -69,7 +69,7 @@ npm start
 Бесплатно, без карты — **Render** (в репо уже лежит `render.yaml` + `Dockerfile`):
 
 1. Зайди на **dashboard.render.com** через GitHub
-2. **New → Web Service** → выбери `ai-stylist`
+2. **New → Web Service** → выбери `sainvio`
 3. Runtime: **Docker** (подхватится сам), план **Free**
 4. В **Environment** Render попросит только секрет (остальное уже в `render.yaml`):
    `ZVENO_API_KEY` = твой ключ
