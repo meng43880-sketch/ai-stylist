@@ -1147,7 +1147,6 @@ function vProfile() {
       <button class="prow" onclick="go('terms')"><span class="tint">${ic('chevR', 16)}</span><span>Условия использования<small>Оферта сервиса</small></span>${ic('chevR', 16)}</button>
       <button class="prow" onclick="logout()"><span class="tint">${ic('user', 18)}</span><span>Выйти<small>${esc(S.login || '')}</small></span>${ic('chevR', 16)}</button>
     </div>
-    <p class="sub" style="text-align:center;margin-top:14px">sainvio · ${esc(OPERATOR.name)}, ИНН ${esc(OPERATOR.inn)} · ${esc(OPERATOR.email)}</p>
     <div class="pgroup danger">
       <button class="prow" onclick="wipe()"><span class="tint red">${ic('trash', 18)}</span><span>Удалить мои данные</span></button>
     </div>
