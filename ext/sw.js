@@ -43,7 +43,7 @@ async function ping(tabId, tries) {
   }
   return false;
 }
-async function wbTabSend(type, url) {
+async function wbTabSend(type, url, query) {
   /* Старые вкладки (открыты до обновления расширения) скрипта не имеют —
      их не ждём дольше 3с, а открываем свежую. */
   const tabs = await chrome.tabs.query({ url: 'https://www.wildberries.ru/*' });
@@ -60,7 +60,7 @@ async function wbTabSend(type, url) {
     }
   }
   try {
-    const res = await chrome.tabs.sendMessage(tab.id, { type, url });
+    const res = await chrome.tabs.sendMessage(tab.id, { type, url, query });
     return { res, mine, tabId: tab.id };
   } catch (e) {
     if (mine) { try { await chrome.tabs.remove(tab.id); } catch (ee) {} }
@@ -81,7 +81,7 @@ async function runCollect() {
     try {
       /* Вкладка ПЕЧАТАЕТ запрос в поиск WB как человек и читает DOM выдачи.
          Медленно (~10с), зато для wbaas неотличимо от ручной работы. */
-      const t = await wbTabSend('humanSearch', qq);
+      const t = await wbTabSend('humanSearch', null, qq);
       tabId = t.tabId; mine = t.mine;
       if (!t.res || !t.res.ok) throw new Error((t.res && t.res.error) || 'пусто');
       const list = (t.res.items || []).map((c) => ({
