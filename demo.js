@@ -41,7 +41,7 @@ const Demo = (() => {
   function parse(q) {
     const s = (q || '').toLowerCase();
     const r = { category: '', subcategory: '', color: '', maxPrice: null, occasion: '' };
-    [['худи|толстов|футбол|рубаш|куртк|пальто|бомбер|свитшот|лонгслив', 'top'], ['брюк|джинс|чинос|карго', 'bottom'], ['кроссов|кед|ботин|челси', 'shoes'], ['рюкзак|часы|кепк|очк', 'acc']].forEach(([re, v]) => { if (new RegExp(re).test(s)) r.category = v; });
+    [['худи|толстов|футбол|рубаш|куртк|пальто|бомбер|свитшот|лонгслив', 'top'], ['брюк|джинс|чинос|карго', 'bottom'], ['кроссов|кед|ботин|челси', 'shoes'], ['рюкзак|сумк|часы|кепк|очк|шапк|бини|панам|шарф|платок|перчат|варежк|носк|ремен|галстук|кошел', 'acc']].forEach(([re, v]) => { if (new RegExp(re).test(s)) r.category = v; });
     [['чёрн|черн', 'black'], ['бел', 'white'], ['олив', 'olive'], ['беж', 'beige'], ['сер', 'gray'], ['зелен|зелён', 'green'], ['син|голуб', 'blue'], ['коричн', 'brown']].forEach(([re, v]) => { if (new RegExp(re).test(s)) r.color = v; });
     const m = s.replace(/\s/g, '').match(/до(\d+)/);
     if (m) r.maxPrice = parseInt(m[1], 10);
