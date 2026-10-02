@@ -380,22 +380,32 @@ class TakprodamCatalogProvider extends CatalogProvider {
     const q = params || {};
     // API без текстового поиска: тянем страницы категории и фильтруем локально.
     // product/ требует source (id площадки); фильтр маркетплейса — marketplace_title.
+    // Дочерние одежные категории в фиде пустые — идём по родителям: 1 одежда, 2 обувь, 11 аксессуары.
+    // API душит частые запросы (429) — идём медленно, с паузой между страницами.
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     const source = q.source || await takprodamSourceId();
+    const cats = q.tp_category_id ? [q.tp_category_id] : [1, 2, 11];
     const pages = Math.min(3, Math.max(1, q.pages || 2));
     const perPage = Math.min(200, Math.max(20, q.perPage || 100));
-    let all = [];
-    for (let page = 1; page <= pages; page++) {
-      const j = await takprodamGet('/product/', {
-        source,
-        marketplace_title: q.marketplace === 'ozon' ? 'Ozon' : q.marketplace === 'wildberries' ? 'Wildberries' : undefined,
-        category_id: q.tp_category_id || undefined,
-        payment_type: q.payment_type || undefined,
-        page, limit: perPage
-      });
-      const arr = j.products || j.items || j.data || j.results || [];
-      if (!arr.length) break;
-      all = all.concat(arr);
-      if (arr.length < perPage) break;
+    let all = [], first = true;
+    for (const cid of cats) {
+      for (let page = 1; page <= pages; page++) {
+        if (!first) await sleep(1500);
+        first = false;
+        const j = await takprodamGet('/product/', {
+          source,
+          marketplace_title: q.marketplace === 'ozon' ? 'Ozon' : q.marketplace === 'wildberries' ? 'Wildberries' : undefined,
+          category_id: cid,
+          payment_type: q.payment_type || undefined,
+          page, limit: perPage
+        });
+        const arr = j.products || j.items || j.data || j.results || [];
+        if (!arr.length) break;
+        all = all.concat(arr);
+        if (arr.length < perPage) break;
+        if (all.length >= 300) break;
+      }
+      if (all.length >= 300) break;
     }
     let items = all.map(normalizeTakprodam).filter(Boolean);
     if (q.query) {
