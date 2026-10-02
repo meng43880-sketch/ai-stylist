@@ -1,15 +1,17 @@
 'use strict';
-/* homefeed.js — «домашний мост»: каталог, собранный скриптом collector/ на
-   домашнем ПК (жилой IP), и запушенный на сервер через POST /api/collector/push.
-   Хранение: backend/data/homefeed.json (gitignore, на Render эфемерно — мост
-   перепушивает сам; без свежих данных выдача молча пустеет, ничего не падает).
+/* homefeed.js — «домашний мост»: каталог, собранный скриптом collector/ или
+   расширением ext/ и запушенный на сервер через POST /api/collector/push.
+   Накопительная газета: прогоны ДОБАВЛЯЮТ/освежают карточки (не заменяют),
+   живут неделю, потолок 5000. Хранение: backend/data/homefeed.json
+   (gitignore, на Render эфемерно — мост перепушивает сам).
    Рубильник: COLLECTOR_ENABLED=true, иначе мост полностью выключен (откат
    без нового деплоя кода — достаточно сменить env на Render). */
 const fs = require('fs');
 const path = require('path');
 const FILE = path.join(__dirname, '..', 'data', 'homefeed.json');
-const MAX_AGE_MS = 24 * 3600 * 1000; // свежее суток — годное
-const MAX_ITEMS = 1500;
+const ITEM_TTL_MS = 7 * 24 * 3600 * 1000; // карточка живёт неделю, потом чистка
+const MAX_ITEMS = 5000; // накопительный потолок (~5-10 МБ JSON — норм)
+const FRESH_PUSH_MS = 24 * 3600 * 1000; // свежий прогон был в последние сутки
 function enabled() { return (process.env.COLLECTOR_ENABLED || '').toLowerCase() === 'true'; }
 function read() {
   try {
@@ -22,12 +24,19 @@ function getItems() {
   if (!enabled()) return [];
   const j = read();
   if (!j.items.length) return [];
-  if (Date.now() - (j.ts || 0) > MAX_AGE_MS) return []; // протухло — не показываем
-  return j.items;
+  // Накопительная газета: живы карточки моложе недели, цел ли последний прогон — неважно
+  const now = Date.now();
+  return j.items.filter((p) => p && (now - (p.fetchedAt || 0)) <= ITEM_TTL_MS);
 }
 function stats() {
   const j = read();
-  return { enabled: enabled(), count: j.items.length, ts: j.ts || 0, ageMin: j.ts ? Math.round((Date.now() - j.ts) / 60000) : -1, fresh: enabled() && j.items.length > 0 && (Date.now() - (j.ts || 0) <= MAX_AGE_MS) };
+  const now = Date.now();
+  const alive = j.items.filter((p) => p && (now - (p.fetchedAt || 0)) <= ITEM_TTL_MS).length;
+  return {
+    enabled: enabled(), count: j.items.length, alive, ts: j.ts || 0,
+    ageMin: j.ts ? Math.round((now - j.ts) / 60000) : -1,
+    fresh: enabled() && alive > 0 && (now - (j.ts || 0) <= FRESH_PUSH_MS)
+  };
 }
 /* Санитизация пуша: только известные поля, лимиты длин — коллектор свой,
    но паранойя дешёвая. */
@@ -55,12 +64,23 @@ function cleanItem(p) {
   o.fetchedAt = Number(o.fetchedAt) || Date.now();
   return o;
 }
+/* Накопление, а не замена: новые освежают старые (цена/наличие),
+   протухшие (старше недели) и лишние сверх потолка вычищаются. */
 function setItems(items) {
-  const clean = (Array.isArray(items) ? items : []).map(cleanItem).filter(Boolean).slice(0, MAX_ITEMS);
-  const seen = new Set(), out = [];
-  clean.forEach((p) => { if (!seen.has(p.id)) { seen.add(p.id); out.push(p); } });
+  const now = Date.now();
+  const prev = read();
+  const byId = new Map();
+  prev.items.forEach((p) => { if (p && p.id) byId.set(p.id, p); });
+  let fresh = 0;
+  (Array.isArray(items) ? items : []).map(cleanItem).filter(Boolean).forEach((p) => {
+    if (!byId.has(p.id)) fresh++;
+    byId.set(p.id, Object.assign({}, byId.get(p.id), p, { fetchedAt: now }));
+  });
+  let out = [...byId.values()].filter((p) => (now - (p.fetchedAt || 0)) <= ITEM_TTL_MS);
+  out.sort((a, b) => (b.fetchedAt || 0) - (a.fetchedAt || 0));
+  out = out.slice(0, MAX_ITEMS);
   try { fs.mkdirSync(path.dirname(FILE), { recursive: true }); } catch {}
-  fs.writeFileSync(FILE, JSON.stringify({ ts: Date.now(), items: out }));
-  return { accepted: out.length, ts: Date.now() };
+  fs.writeFileSync(FILE, JSON.stringify({ ts: now, items: out }));
+  return { accepted: fresh, total: out.length, ts: now };
 }
 module.exports = { enabled, getItems, setItems, stats, MAX_ITEMS };
