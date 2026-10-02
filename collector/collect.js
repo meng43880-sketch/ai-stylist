@@ -16,7 +16,7 @@
    Паузы и скромный объём снижают риск бана IP, но не убирают его. */
 const fs = require('fs');
 const path = require('path');
-const { normalizeWbItem } = require('../backend/lib/market');
+const { normalizeWbItem, wbFetch } = require('../backend/lib/market');
 
 const ROOT = path.join(__dirname, '..');
 const DOTENV = path.join(ROOT, 'backend', '.env');
@@ -45,18 +45,22 @@ const PAUSE_MS = 2500;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
 
+/* Идём через общий wbFetch: сначала напрямую, при 403/429 — через
+   чужие IP публичных CORS-прокси. Прямой REJECT больше не приговор. */
 async function wbSearch(query) {
   const q = encodeURIComponent(query);
   const url = `https://search.wb.ru/exactmatch/ru/common/v18/search?ab_testing=false&appType=1&curr=rub&dest=-1257786&page=1&query=${q}&resultset=catalog&sort=popular&spp=${PER_QUERY}&suppressSpellcheck=false`;
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), 15000);
   try {
-    const r = await fetch(url, { signal: ctrl.signal, headers: { 'User-Agent': UA, Accept: 'application/json', 'Accept-Language': 'ru-RU,ru;q=0.9' } });
-    if (r.status === 403 || r.status === 429) { const e = new Error('WB reject ' + r.status); e.code = 'REJECT'; throw e; }
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    const j = await r.json();
-    return (j && j.data && j.data.products) || [];
-  } finally { clearTimeout(t); }
+    const j = await wbFetch(url);
+    return { products: (j && j.data && j.data.products) || [], via: 'direct' };
+  } catch (e) {
+    if (e.code === 'REJECT' || e.code === 'HTTP' || e.code === 'WB_BLOCKED') {
+      const err = new Error('WB reject, и прокси не помогли');
+      err.code = 'REJECT';
+      throw err;
+    }
+    throw e;
+  }
 }
 
 (async () => {
@@ -68,7 +72,7 @@ async function wbSearch(query) {
   let ok = 0, fail = 0;
   for (const qq of QUERIES) {
     try {
-      const raw = await wbSearch(qq);
+      const { products: raw } = await wbSearch(qq);
       raw.map(normalizeWbItem).filter(Boolean).forEach((p) => {
         if (!seen.has(p.id)) { seen.add(p.id); out.push(p); }
       });
@@ -77,7 +81,7 @@ async function wbSearch(query) {
     } catch (e) {
       fail++;
       console.error(`- ${qq}: ${e.code || e.message}`);
-      if (e.code === 'REJECT') { console.error('WB режет IP — стоп, попробуй позже'); break; }
+      if (e.code === 'REJECT' && !out.length) { console.error('WB режет и напрямую, и через прокси — стоп, попробуй позже'); break; }
     }
     await sleep(PAUSE_MS);
   }

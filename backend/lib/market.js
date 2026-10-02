@@ -495,4 +495,4 @@ class MarketplaceService {
   }
 }
 
-module.exports = { wbSearchServer, funnelSearch, dedupeLive, ozonSearchServer, normalizeWbItem, scoreLive, structToQuery, structToQueries, wbPhoto, wbUrl, affLink, toModel, takprodamGet, normalizeTakprodam, CatalogProvider, DemoCatalogProvider, WbPublicCatalogProvider, OzonCatalogProvider, TakprodamCatalogProvider, MarketplaceProvider, WildberriesProvider, OzonProvider, DemoMarketplaceProvider, TakprodamProvider, MarketplaceService };
+module.exports = { wbSearchServer, wbFetch, funnelSearch, dedupeLive, ozonSearchServer, normalizeWbItem, scoreLive, structToQuery, structToQueries, wbPhoto, wbUrl, affLink, toModel, takprodamGet, normalizeTakprodam, CatalogProvider, DemoCatalogProvider, WbPublicCatalogProvider, OzonCatalogProvider, TakprodamCatalogProvider, MarketplaceProvider, WildberriesProvider, OzonProvider, DemoMarketplaceProvider, TakprodamProvider, MarketplaceService };
