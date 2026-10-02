@@ -311,12 +311,27 @@ class DemoMarketplaceProvider extends MarketplaceProvider {
    Цены/комиссии обновляются раз в сутки. legal_text показываем в UI. */
 const TAKPRODAM_BASE = 'https://api.takprodam.ru/v2/publisher';
 function takprodamCfg() {
-  return { key: process.env.TAKPRODAM_API_KEY || '' };
+  return { key: process.env.TAKPRODAM_API_KEY || '', sourceId: process.env.TAKPRODAM_SOURCE_ID || '' };
+}
+/* source (id площадки паблишера) — обязательный параметр product/.
+   Берём из TAKPRODAM_SOURCE_ID либо первую площадку из /source/ (кеш). */
+let __tpSourceCache = { id: 0, ts: 0 };
+async function takprodamSourceId() {
+  const cfg = takprodamCfg();
+  if (cfg.sourceId) return cfg.sourceId;
+  if (__tpSourceCache.id && Date.now() - __tpSourceCache.ts < 3600000) return __tpSourceCache.id;
+  const j = await takprodamGet('/source/', {});
+  const items = j.items || j.data || [];
+  if (!items.length || items[0].id == null) { const e = new Error('Takprodam: нет площадок в /source/'); e.code = 'TP_ERROR'; e.status = 502; throw e; }
+  __tpSourceCache = { id: items[0].id, ts: Date.now() };
+  return items[0].id;
 }
 async function takprodamGet(path, params) {
   const { key } = takprodamCfg();
   if (!key) { const e = new Error('Нужен TAKPRODAM_API_KEY: регистрация паблишера на takprodam.ru → токен из профиля.'); e.code = 'NO_SOURCE'; e.status = 503; throw e; }
-  const qs = new URLSearchParams(params || {}).toString();
+  const clean = {};
+  Object.entries(params || {}).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') clean[k] = v; });
+  const qs = new URLSearchParams(clean).toString();
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 20000);
   try {
@@ -364,12 +379,15 @@ class TakprodamCatalogProvider extends CatalogProvider {
   async search(params) {
     const q = params || {};
     // API без текстового поиска: тянем страницы категории и фильтруем локально.
+    // product/ требует source (id площадки); фильтр маркетплейса — marketplace_title.
+    const source = q.source || await takprodamSourceId();
     const pages = Math.min(3, Math.max(1, q.pages || 2));
     const perPage = Math.min(200, Math.max(20, q.perPage || 100));
     let all = [];
     for (let page = 1; page <= pages; page++) {
       const j = await takprodamGet('/product/', {
-        marketplace: q.marketplace === 'ozon' ? 'Ozon' : q.marketplace === 'wildberries' ? 'Wildberries' : undefined,
+        source,
+        marketplace_title: q.marketplace === 'ozon' ? 'Ozon' : q.marketplace === 'wildberries' ? 'Wildberries' : undefined,
         category_id: q.tp_category_id || undefined,
         payment_type: q.payment_type || undefined,
         page, limit: perPage

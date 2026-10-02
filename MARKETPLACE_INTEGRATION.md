@@ -83,8 +83,10 @@
 (сайт/агрегатор) → токен из профиля → `TAKPRODAM_API_KEY`.
 
 - `GET https://api.takprodam.ru/v2/publisher/product/` — товары с готовыми
-  партнёрскими ссылками (`tracking_link`), фильтры marketplace/category/
-  payment, limit до 1000; также `product-category/`, `promotion/`, `source/`
+  партнёрскими ссылками (`tracking_link`), обязательный `source` (id площадки,
+  берётся из `TAKPRODAM_SOURCE_ID` или первой из `source/`), фильтры
+  marketplace_title/category_id/payment_type, limit до 200; также
+  `product-category/`, `promotion/`, `source/`
 - Наш `TakprodamProvider`: тянет 2 страницы, фильтрует локально по запросу,
   маппит в `Product` (реальные цены/фото/рейтинги WB и Ozon), `source: 'takprodam'`
 - Кнопка «Купить» открывает `tracking_link` (заработок), рядом показывается
