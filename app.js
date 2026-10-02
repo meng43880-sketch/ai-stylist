@@ -243,7 +243,7 @@ function vWelcome() {
     <div class="shade"></div>
     <div class="topbar"><span class="wordmark">sainvio</span></div>
     <div class="body">
-      <h1>Скажи,<br>что <em>надеть</em></h1>
+      <h1>Скажу,<br>что <em>надеть</em></h1>
       <p>Подберём вещи и соберём образы под твою внешность, вкус и бюджет.</p>
       <button class="btn light" onclick="enterApp()">Начать</button>
       <div class="foot">1 минута · Фото · Параметры · Подборка</div>
