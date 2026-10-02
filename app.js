@@ -162,6 +162,15 @@ const LS = 'sainvio_v3';
 const LS_LEGACY = 'stylist_v3';
 const LS_W = 'sainvio_v3_w';
 const LS_W_LEGACY = 'stylist_v3_w';
+/* Владелец сервиса (152-ФЗ, ст.10 149-ФЗ). ЗАПОЛНИ перед запуском в РФ. */
+const OPERATOR = { name: '[ИП/ООО, ФИО]', inn: '[ИНН]', email: '[email для запросов по ПДн]', address: '[адрес]' };
+const LS_COOKIE = 'sainvio_cookie';
+function cookieChoice() { try { return localStorage.getItem(LS_COOKIE); } catch (e) { return null; } }
+window.cookieAccept = function (v) { try { localStorage.setItem(LS_COOKIE, JSON.stringify({ v, t: Date.now() })); } catch (e) {} const b = document.getElementById('cookiebar'); if (b) b.remove(); };
+function cookieBanner() {
+  if (cookieChoice()) return '';
+  return `<div class="cookiebar" id="cookiebar"><p>Мы используем cookie и локальное хранилище только для работы sainvio (вход, подборки, гардероб). Рекламных трекеров нет. Подробнее — <a onclick="go('privacy')">в политике</a>.</p><div class="row"><button class="btn" style="flex:1" onclick="cookieAccept('all')">Принять</button><button class="btn ghost" style="flex:1" onclick="cookieAccept('essential')">Только необходимые</button></div></div>`;
+}
 const STYLES = [['casual', 'Повседневный'], ['smart', 'Smart casual'], ['street', 'Streetwear'], ['minimal', 'Минимализм'], ['sport', 'Спорт'], ['oldmoney', 'Old money'], ['business', 'Деловой'], ['classic', 'Классика'], ['oversize', 'Oversize'], ['party', 'На выход']];
 const SEASON_RU = { spring: 'Весна', summer: 'Лето', autumn: 'Осень', winter: 'Зима' };
 let S = {
@@ -173,7 +182,8 @@ let S = {
   feedOutfits: [], gapItems: [], wardrobe: { items: [], insights: null },
   ctx: { season: 'autumn', weather: null },
   ob: { styles: [] }, greeted: false,
-  token: null, login: '', authMode: 'login', authErr: ''
+  token: null, login: '', authMode: 'login', authErr: '',
+  photoConsent: false
 };
 try {
   const raw = localStorage.getItem(LS) || localStorage.getItem(LS_LEGACY);
@@ -181,7 +191,7 @@ try {
 } catch (e) {}
 S.route = (S.done && S.token) ? 'home' : 'welcome'; S.params = {};
 function save() {
-  try { localStorage.setItem(LS, JSON.stringify({ profile: S.profile, photo: S.photo, aiNote: S.aiNote, done: S.done, favorites: S.favorites, savedOutfits: S.savedOutfits, chat: S.chat.slice(-30).map((m) => { const c = Object.assign({}, m); delete c.img; return c; }), cid: S.cid, ob: S.ob, greeted: S.greeted, token: S.token, login: S.login, aiModel: S.aiModel })); } catch (e) {}
+  try { localStorage.setItem(LS, JSON.stringify({ profile: S.profile, photo: S.photo, photoConsent: S.photoConsent, aiNote: S.aiNote, done: S.done, favorites: S.favorites, savedOutfits: S.savedOutfits, chat: S.chat.slice(-30).map((m) => { const c = Object.assign({}, m); delete c.img; return c; }), cid: S.cid, ob: S.ob, greeted: S.greeted, token: S.token, login: S.login, aiModel: S.aiModel })); } catch (e) {}
 }
 
 /* ---------- router ---------- */
@@ -197,8 +207,8 @@ window.__on401 = function () {
 };
 const TABS = [['home', 'Главная', 'home'], ['outfits', 'Образы', 'shirt'], ['wardrobe', 'Гардероб', 'hanger'], ['favorites', 'Сохранённое', 'heart'], ['profile', 'Профиль', 'user']];
 function render() {
-  const v = { welcome: vWelcome, auth: vAuth, photo: vPhoto, params: vParams, style: vStyle, analyzing: vAnalyzing, home: vHome, results: vResults, product: () => vProduct(S.params.id), outfit: () => vOutfit(S.params.id), outfits: vOutfits, favorites: vFav, profile: vProfile, wardrobe: vWardrobe, privacy: vPrivacy }[S.route] || vWelcome;
-  $('#app').innerHTML = `<div class="screen">${v()}</div>`;
+  const v = { welcome: vWelcome, auth: vAuth, photo: vPhoto, params: vParams, style: vStyle, analyzing: vAnalyzing, home: vHome, results: vResults, product: () => vProduct(S.params.id), outfit: () => vOutfit(S.params.id), outfits: vOutfits, favorites: vFav, profile: vProfile, wardrobe: vWardrobe, privacy: vPrivacy, terms: vTerms }[S.route] || vWelcome;
+  $('#app').innerHTML = `<div class="screen">${v()}</div>` + cookieBanner();
   const main = ['home', 'outfits', 'wardrobe', 'favorites', 'profile'].includes(S.route);
   const tabs = $('#tabs');
   tabs.hidden = !main;
@@ -248,6 +258,7 @@ function vAuth() {
     ${S.authErr ? `<div class="note" style="background:#FDECEA;color:#8f1d12">${esc(S.authErr)}</div>` : ''}
     <div style="height:16px"></div>
     <button class="btn" onclick="authSubmit()">${reg ? 'Зарегистрироваться' : 'Войти'}</button>
+    <p class="sub" style="text-align:center;margin-top:12px">Продолжая, принимаешь <a onclick="go('terms')">условия использования</a> и <a onclick="go('privacy')">политику</a></p>
     <div style="height:22px"></div></div>`;
 }
 window.authTab = function (m) { stashDraft(); S.authMode = m; S.authErr = ''; render(); };
@@ -305,16 +316,25 @@ function vPhoto() {
     <h1 class="title">Покажи себя</h1><p class="sub">AI посмотрит на фото один раз — и дальше будет подбирать точнее.</p>
     <label class="photoframe" style="cursor:pointer">${S.photo ? `${IM(S.photo, 'Фото')}` : `<span class="ph">${ic('camera', 40)}<span style="display:block;margin-top:10px">Нажми, чтобы добавить фото<br>В полный рост, при хорошем свете</span></span>`}<input type="file" accept="image/*" hidden onchange="onPhoto(event)"></label>
     ${S.photo ? `<p class="sub" style="text-align:center">Нажми на фото, чтобы заменить</p>` : ''}
+    <button class="agree" onclick="togPhotoConsent()" aria-label="Согласие на обработку фото">
+      <span class="box ${S.photoConsent ? 'on' : ''}">${S.photoConsent ? ic('check', 13) : ''}</span>
+      <span>Соглашаюсь на обработку фото (биометрические данные) и передачу AI-провайдеру для анализа внешности. <a onclick="event.stopPropagation();go('privacy')">Подробнее</a></span>
+    </button>
     <div style="height:14px"></div>
-    <button class="btn" onclick="go('params')">Дальше</button>
+    <button class="btn" onclick="goPhotoNext()">Дальше</button>
     <button class="link" style="width:100%;justify-content:center" onclick="S.photo=null;save();go('params')">Пропустить</button>
     <div style="height:24px"></div></div>`;
 }
+window.togPhotoConsent = function () { S.photoConsent = !S.photoConsent; save(); render(); };
+window.goPhotoNext = function () {
+  if (S.photo && !S.photoConsent) { toast('Поставь галочку согласия на обработку фото — или пропусти этот шаг'); return; }
+  go('params');
+};
 window.onPhoto = function (e) {
   const f = e.target.files && e.target.files[0];
   if (!f || !f.type.startsWith('image/')) return;
   const r = new FileReader();
-  r.onload = () => { S.photo = r.result; save(); render(); };
+  r.onload = () => { S.photo = r.result; S.photoConsent = true; save(); render(); };
   r.readAsDataURL(f);
 };
 function vParams() {
@@ -401,7 +421,7 @@ async function runAnalyzing() {
   const say = (t) => { const el = document.getElementById('anmsg'); if (el) el.textContent = t; };
   try {
     await Api.post('/api/profile', { profile: S.profile });
-    if (S.photo) {
+    if (S.photo && S.photoConsent) {
       say('Смотрим фотографию…');
       const small = await shrinkPhoto(S.photo);
       if (small && small.length < 1300000) {
@@ -583,6 +603,8 @@ window.chatPhoto = function () {
   inp.onchange = () => {
     const f = inp.files && inp.files[0];
     if (!f || !f.type.startsWith('image/')) return;
+    if (!S.photoConsent && !confirm('Фото вещи будет отправлено AI-провайдеру для поиска похожих. Продолжить?')) return;
+    S.photoConsent = true; save();
     const r = new FileReader();
     r.onload = () => {
       const img = new Image();
@@ -1029,17 +1051,43 @@ window.wDel = async function (id) {
 /* ---------- privacy ---------- */
 window.privBack = function () { go(S.token ? 'profile' : 'auth'); };
 function vPrivacy() {
+  const op = OPERATOR;
+  const li = (t, d) => `<div class="kv"><span>${t}</span></div><p class="sub">${d}</p>`;
   return `<div class="wrap">
     <div class="row"><button class="iconbtn" onclick="privBack()" aria-label="Назад">${ic('back', 19)}</button>
-    <div class="grow"><h1 class="title" style="font-size:24px">Конфиденциальность</h1></div></div>
-    <div class="kv"><span>Профиль и параметры</span></div>
-    <p class="sub">Хранятся в твоём браузере и на сервере приложения только для подборок. Никому не передаются.</p>
-    <div class="kv"><span>Фотографии</span></div>
-    <p class="sub">Фото для анализа внешности отправляется AI-провайдеру один раз и кешируется. По запросу удалим всё: Профиль → «Удалить мои данные».</p>
-    <div class="kv"><span>Переходы в магазины</span></div>
-    <p class="sub">Кнопки «Купить» ведут на Wildberries и Ozon. Там действуют их собственные правила конфиденциальности.</p>
-    <div class="kv"><span>Реклама и трекинг</span></div>
-    <p class="sub">Не продаём данные, не ставим рекламных трекеров. Ссылки на магазины могут быть партнёрскими — это не меняет цену для тебя.</p>
+    <div class="grow"><h1 class="title" style="font-size:24px">Политика конфиденциальности</h1></div></div>
+    <p class="sub">sainvio — ${esc(op.name)}, ИНН ${esc(op.inn)}, ${esc(op.address)}, контакт для вопросов по данным: ${esc(op.email)}. Это краткая политика по 152-ФЗ. Полный текст и реквизиты уточняй у оператора до запуска.</p>
+    ${li('1. Какие данные', 'Логин и пароль (хеш), имя, рост, вес, пол, телосложение, размеры, стили, бюджет, цвета; фото; гардероб, избранное, история чата и подборок; технические cookie и localStorage.')}
+    ${li('2. Зачем', 'Подбор вещей и образов, анализ фото, ведение аккаунта и гардероба. Основания: твоё согласие и договор (условия использования). Без данных подборки не работают.')}
+    ${li('3. Фото и биометрия', 'Фото лица — биометрические данные (ст.11 152-ФЗ). Обрабатываем только с отдельной галочки, отправляем AI-провайдеру один раз для анализа и кешируем результат. Без галочки фото никуда не уходит.')}
+    ${li('4. Кому передаём', 'Хостинг и база (сейчас иностранные — см. п.5), AI-провайдеры анализа фото и диалога, Wildberries/Ozon — только когда переходишь по ссылке (там их правила). Данные не продаём, рекламных трекеров нет.')}
+    ${li('5. Где хранится', 'Сейчас сервер и база могут быть за пределами РФ. Для запуска в РФ первичную базу граждан РФ перенесём на серверы в России, а о трансграничной передаче уведомим Роскомнадзор.')}
+    ${li('6. Сколько храним', 'Пока пользуешься аккаунтом. Удаление: Профиль → «Удалить мои данные» стирает серверные данные; локальные чистятся вместе с ними. По закону можем хранить то, что обязаны (например, для ответов на споры).')}
+    ${li('7. Твои права', 'Доступ, уточнение, блокирование, удаление, отзыв согласия через «Удалить мои данные» или письмом на ' + esc(op.email) + '. Ответим в сроки по 152-ФЗ.')}
+    ${li('8. Cookie', 'Только функциональные: вход, подборки, выбор баннера. Кнопка «Только необходимые» отключает всё необязательное. Запретить можно и в браузере — часть функций пропадёт.')}
+    ${li('9. AI-рекомендации', 'Проценты и образы считает код + AI по твоему профилю. Это предположение стилиста, а не гарантия качества, размера или наличия. Живые цены WB могут меняться — проверяй на карточке.')}
+    ${li('10. Партнёрские ссылки', 'Часть ссылок на магазины может быть партнёрской (вознаграждение сервиса, цена для тебя не меняется). Такие размещения маркируются по 38-ФЗ: пометка «Реклама», рекламодатель и erid.')}
+    ${li('11. Безопасность', 'Пароли — только хеши, сессии ограниченные, лимиты запросов, HTTPS. Об утечке уведомим РКН за 24 часа и subjects — по закону.')}
+    <div class="kv"><span>Условия использования</span></div>
+    <p class="sub"><a onclick="go('terms')">Читать оферту</a> · <a onclick="wipe()">Удалить мои данные</a></p>
+    <div style="height:20px"></div></div>`;
+}
+function vTerms() {
+  const op = OPERATOR;
+  return `<div class="wrap">
+    <div class="row"><button class="iconbtn" onclick="privBack()" aria-label="Назад">${ic('back', 19)}</button>
+    <div class="grow"><h1 class="title" style="font-size:24px">Условия использования</h1></div></div>
+    <p class="sub">Пользуясь sainvio (${esc(op.name)}), ты принимаешь эти условия. Сервис — рекомендации по одежде, не договор купли-продажи: сами вещи продают WB/Ozon по их правилам.</p>
+    <div class="kv"><span>Аккаунт</span></div>
+    <p class="sub">Логин 3–20 символов, пароль от 6 символов. Не передавай доступ третьим лицам. 18+ либо с согласия родителя.</p>
+    <div class="kv"><span>Контент</span></div>
+    <p class="sub">Загружай только свои фото и только то, что разрешено. Запрещено: чужой контент без прав, оскорбления, обход защиты, спам, парсинг.</p>
+    <div class="kv"><span>Ответственность</span></div>
+    <p class="sub">Подборки — предположения AI под твой вкус; размер, посадку, наличие и цену проверяй у продавца. Сервис «как есть», бесплатный уровень без гарантий непрерывности.</p>
+    <div class="kv"><span>Оплата и партнёрки</span></div>
+    <p class="sub">Доступ бесплатный. Переходы в магазины могут приносить сервису комиссию — цена для тебя не меняется. Рекламные размещения маркируются.</p>
+    <div class="kv"><span>Связь</span></div>
+    <p class="sub">${esc(op.email)} · ${esc(op.address)}</p>
     <div style="height:20px"></div></div>`;
 }
 
@@ -1095,9 +1143,11 @@ function vProfile() {
       <button class="prow" onclick="go('params')"><span class="tint">${ic('sliders', 18)}</span><span>Мои параметры<small>Рост, размеры</small></span>${ic('chevR', 16)}</button>
     </div>
     <div class="pgroup"><div class="ptitle">Аккаунт</div>
-      <button class="prow" onclick="go('privacy')"><span class="tint">${ic('shield', 18)}</span><span>Конфиденциальность</span>${ic('chevR', 16)}</button>
+      <button class="prow" onclick="go('privacy')"><span class="tint">${ic('shield', 18)}</span><span>Конфиденциальность<small>Политика по 152-ФЗ</small></span>${ic('chevR', 16)}</button>
+      <button class="prow" onclick="go('terms')"><span class="tint">${ic('chevR', 16)}</span><span>Условия использования<small>Оферта сервиса</small></span>${ic('chevR', 16)}</button>
       <button class="prow" onclick="logout()"><span class="tint">${ic('user', 18)}</span><span>Выйти<small>${esc(S.login || '')}</small></span>${ic('chevR', 16)}</button>
     </div>
+    <p class="sub" style="text-align:center;margin-top:14px">sainvio · ${esc(OPERATOR.name)}, ИНН ${esc(OPERATOR.inn)} · ${esc(OPERATOR.email)}</p>
     <div class="pgroup danger">
       <button class="prow" onclick="wipe()"><span class="tint red">${ic('trash', 18)}</span><span>Удалить мои данные</span></button>
     </div>
