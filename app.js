@@ -116,44 +116,29 @@ const WBClient = {
       live: true, source: 'wb', url: `https://www.wildberries.ru/catalog/${id}/detail.aspx`, fetchedAt: Date.now(), desc: ''
     };
   },
+  /* Свежая полоса под запрос: 1 страница WB (~до 30) прямо из браузера
+     пользователя (его IP обычно пускают). Мёртвые прокси выкинуты:
+     allorigins висит, corsproxy.io требует ключ — только тормозят. */
   async searchText(text, limit) {
+    const n = Math.min(30, Math.max(1, limit || 10));
     const q = encodeURIComponent(String(text || '').slice(0, 60));
     if (!q) return [];
-    const target = (page, spp) => `https://search.wb.ru/exactmatch/ru/common/v18/search?ab_testing=false&appType=1&curr=rub&dest=-1257786&page=${page}&query=${q}&resultset=catalog&sort=popular&spp=${spp}&suppressSpellcheck=false`;
-    const getJson = async (url, ms) => {
-      const c = new AbortController();
-      const t = setTimeout(() => c.abort(), ms);
-      try {
-        const r = await fetch(url, { signal: c.signal });
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        return await r.json();
-      } finally { clearTimeout(t); }
-    };
-    /* Прямо → allorigins → corsproxy.io. Дальше — только смена сети. */
-    const proxied = [
-      (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
-      (u) => `https://corsproxy.io/?url=${encodeURIComponent(u)}`
-    ];
-    /* Эксперимент: тянем ровно 1 товар. Если блок по IP — 403 останется. */
-    let all = [], directOk = false;
+    const target = `https://search.wb.ru/exactmatch/ru/common/v18/search?ab_testing=false&appType=1&curr=rub&dest=-1257786&page=1&query=${q}&resultset=catalog&sort=popular&spp=30&suppressSpellcheck=false`;
+    const c = new AbortController();
+    const t = setTimeout(() => c.abort(), 6000);
     try {
-      const j = await getJson(target(1, 5), 8000);
-      directOk = true;
-      all = all.concat(((j && j.data && j.data.products) || []));
-    } catch (e) {}
-    for (const px of proxied) {
-      if (directOk || all.length) break;
-      try {
-        const j = await getJson(px(target(1, 5)), 12000);
-        all = all.concat(((j && j.data && j.data.products) || []));
-      } catch (e) {}
-    }
-    const seen = new Set(), out = [];
-    all.map((x) => this.norm(x)).forEach((p) => {
-      if (!p || seen.has(p.id)) return;
-      seen.add(p.id); out.push(p);
-    });
-    return out.slice(0, 1);
+      const r = await fetch(target, { signal: c.signal });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const j = await r.json();
+      const seen = new Set(), out = [];
+      (((j && j.data && j.data.products) || [])).map((x) => this.norm(x)).forEach((p) => {
+        if (!p || seen.has(p.id)) return;
+        seen.add(p.id); out.push(p);
+      });
+      return out.slice(0, n);
+    } catch (e) {
+      return [];
+    } finally { clearTimeout(t); }
   }
 };
 
@@ -687,7 +672,7 @@ async function askAI(text, img) {
       if (raw.length) {
         const s = await Api.post('/api/market/score', { items: raw, struct: {} });
         (s.items || []).forEach((p) => { RC[p.id] = p; });
-        patch.live = (s.items || []).slice(0, 6).map((p) => p.id);
+        patch.live = (s.items || []).slice(0, 10).map((p) => p.id);
       } else patch.liveBlocked = true;
     } catch (e) { patch.liveBlocked = true; }
     fin(patch);
@@ -711,7 +696,7 @@ async function askAI(text, img) {
         raw.forEach((p) => { try { const r = Demo.score(p, S.profile, fb); scored.push(Object.assign({}, p, { aiScore: r.score, aiParts: r.parts })); } catch (se) {} });
         scored.sort((a, b) => b.aiScore - a.aiScore);
         scored.forEach((p) => { RC[p.id] = p; });
-        if (scored.length) demoPatch.live = scored.slice(0, 6).map((p) => p.id);
+        if (scored.length) demoPatch.live = scored.slice(0, 10).map((p) => p.id);
         else demoPatch.liveBlocked = true;
       } catch (we) { demoPatch.liveBlocked = true; }
       fin(demoPatch);
