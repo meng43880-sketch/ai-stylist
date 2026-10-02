@@ -166,10 +166,22 @@ const LS_W_LEGACY = 'stylist_v3_w';
 const OPERATOR = { name: '[ИП/ООО, ФИО]', inn: '[ИНН]', email: '[email для запросов по ПДн]', address: '[адрес]' };
 const LS_COOKIE = 'sainvio_cookie';
 function cookieChoice() { try { return localStorage.getItem(LS_COOKIE); } catch (e) { return null; } }
-window.cookieAccept = function (v) { try { localStorage.setItem(LS_COOKIE, JSON.stringify({ v, t: Date.now() })); } catch (e) {} const b = document.getElementById('cookiebar'); if (b) b.remove(); };
+window.cookieAccept = function (v) { try { localStorage.setItem(LS_COOKIE, JSON.stringify({ v, t: Date.now() })); } catch (e) {} clearTimeout(window.__cookieT); __cookieDeadline = 0; const b = document.getElementById('cookiebar'); if (b) b.remove(); };
+let __cookieDeadline = 0;
 function cookieBanner() {
   if (cookieChoice()) return '';
-  return `<div class="cookiebar" id="cookiebar"><p>Мы используем cookie и локальное хранилище только для работы sainvio (вход, подборки, гардероб). Рекламных трекеров нет. Подробнее — <a onclick="go('privacy')">в политике</a>.</p><div class="row"><button class="btn" style="flex:1" onclick="cookieAccept('all')">Принять</button><button class="btn ghost" style="flex:1" onclick="cookieAccept('essential')">Только необходимые</button></div></div>`;
+  return `<div class="cookiebar pre" id="cookiebar"><p>Мы используем cookie и локальное хранилище только для работы sainvio (вход, подборки, гардероб). Рекламных трекеров нет. Подробнее — <a onclick="go('privacy')">в политике</a>.</p><div class="row"><button class="btn" style="flex:1" onclick="cookieAccept('all')">Принять</button><button class="btn ghost" style="flex:1" onclick="cookieAccept('essential')">Только необходимые</button></div></div>`;
+}
+function scheduleCookieBar() {
+  const b = document.getElementById('cookiebar');
+  if (!b) return;
+  if (cookieChoice()) { b.remove(); return; }
+  if (!__cookieDeadline) __cookieDeadline = Date.now() + 10000;
+  clearTimeout(window.__cookieT);
+  window.__cookieT = setTimeout(() => {
+    const el = document.getElementById('cookiebar');
+    if (el && !cookieChoice()) el.classList.remove('pre');
+  }, Math.max(0, __cookieDeadline - Date.now()));
 }
 const STYLES = [['casual', 'Повседневный'], ['smart', 'Smart casual'], ['street', 'Streetwear'], ['minimal', 'Минимализм'], ['sport', 'Спорт'], ['oldmoney', 'Old money'], ['business', 'Деловой'], ['classic', 'Классика'], ['oversize', 'Oversize'], ['party', 'На выход']];
 const SEASON_RU = { spring: 'Весна', summer: 'Лето', autumn: 'Осень', winter: 'Зима' };
@@ -209,6 +221,7 @@ const TABS = [['home', 'Главная', 'home'], ['outfits', 'Образы', 's
 function render() {
   const v = { welcome: vWelcome, auth: vAuth, photo: vPhoto, params: vParams, style: vStyle, analyzing: vAnalyzing, home: vHome, results: vResults, product: () => vProduct(S.params.id), outfit: () => vOutfit(S.params.id), outfits: vOutfits, favorites: vFav, profile: vProfile, wardrobe: vWardrobe, privacy: vPrivacy, terms: vTerms }[S.route] || vWelcome;
   $('#app').innerHTML = `<div class="screen">${v()}</div>` + cookieBanner();
+  scheduleCookieBar();
   const main = ['home', 'outfits', 'wardrobe', 'favorites', 'profile'].includes(S.route);
   const tabs = $('#tabs');
   tabs.hidden = !main;
