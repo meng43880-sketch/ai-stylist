@@ -47,24 +47,50 @@ async function log(msg) {
   const arr = (o.log || []).concat([new Date().toLocaleTimeString() + ' ' + msg]).slice(-30);
   await chrome.storage.local.set({ log: arr });
 }
+/* Вкладка WB для запросов: ищем открытую, иначе открываем фоновую сами.
+   Ждём готовности content.js (пинг до 12с), в конце свою вкладку закрываем. */
+async function wbTabSend(type, url) {
+  const tabs = await chrome.tabs.query({ url: 'https://www.wildberries.ru/*' });
+  let tab = tabs[0], mine = false;
+  if (!tab) {
+    tab = await chrome.tabs.create({ url: 'https://www.wildberries.ru/', active: false });
+    mine = true;
+  }
+  for (let i = 0; i < 12; i++) {
+    try {
+      const pong = await chrome.tabs.sendMessage(tab.id, { type: 'wbPing' });
+      if (pong && pong.ok) break;
+    } catch (e) { /* ещё грузится */ }
+    await sleep(1000);
+  }
+  try {
+    const res = await chrome.tabs.sendMessage(tab.id, { type, url });
+    return { res, mine, tabId: tab.id };
+  } catch (e) {
+    if (mine) { try { await chrome.tabs.remove(tab.id); } catch (ee) {} }
+    throw new Error('Вкладка WB не отвечает — открой wildberries.ru вручную');
+  }
+}
 async function runCollect() {
   const cfg = await chrome.storage.local.get(['backend', 'key']);
   const backend = (cfg.backend || '').replace(/\/$/, '');
   const key = cfg.key || '';
   if (!backend || !key) { await log('Нет backend/key — впиши в попапе'); return; }
   await chrome.storage.local.set({ running: true });
-  await log('Старт: ' + QUERIES.length + ' запросов');
+  await log('Старт: ' + QUERIES.length + ' запросов (через вкладку WB)');
   const seen = new Set(), out = [];
-  let fails = 0;
+  let fails = 0, tabId = null, mine = false;
+  const closeTab = async () => { if (mine && tabId) { try { await chrome.tabs.remove(tabId); } catch (e) {} mine = false; } };
   for (const qq of QUERIES) {
     try {
+      /* Запрос выполняет вкладка wildberries.ru: родной origin + куки —
+         для wbaas неотличимо от работы сайта. */
       const url = 'https://search.wb.ru/exactmatch/ru/common/v18/search?ab_testing=false&appType=1&curr=rub&dest=-1257786&page=1&query='
         + encodeURIComponent(qq) + '&resultset=catalog&sort=popular&spp=' + PER_QUERY + '&suppressSpellcheck=false';
-      /* credentials:include — шлём куки сессии wildberries.ru из браузера:
-         без них wbaas режет даже из живого Chrome (HTTP 403). */
-      const r = await fetch(url, { credentials: 'include' });
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      const j = await r.json();
+      const t = await wbTabSend('wbFetch', url);
+      tabId = t.tabId; mine = t.mine;
+      if (!t.res || !t.res.ok) throw new Error((t.res && t.res.error) || 'пусто');
+      const j = t.res.data;
       const list = (j && j.data && j.data.products) || [];
       list.map(norm).filter(Boolean).forEach((p) => { if (!seen.has(p.id)) { seen.add(p.id); out.push(p); } });
       fails = 0;
@@ -76,6 +102,7 @@ async function runCollect() {
     }
     await sleep(PAUSE_MS);
   }
+  await closeTab();
   if (!out.length) { await chrome.storage.local.set({ running: false }); return; }
   try {
     const r = await fetch(backend + '/api/collector/push', {
@@ -87,6 +114,7 @@ async function runCollect() {
   } catch (e) {
     await log('push ERR ' + e.message);
   }
+  await closeTab();
   await chrome.storage.local.set({ running: false, lastRun: Date.now(), lastCount: out.length });
 }
 chrome.runtime.onMessage.addListener((m) => { if (m && m.type === 'collect') runCollect(); });
