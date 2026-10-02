@@ -225,7 +225,7 @@ async function searchPipeline({ struct, text, profile, feedback, limit, wardrobe
     const tp = await svc.search({
       marketplace: 'takprodam', query: text || '',
       category: struct.category || '',
-      maxPrice: struct.maxPrice || undefined, limit: 60
+      maxPrice: struct.maxPrice || undefined, limit: 60, pages: 1, perPage: 60
     });
     if (tp.items.length) {
       const tpCtx = scoreCtx(profile, feedback, { occasion: struct && struct.occasion, wardrobe: wardrobe || [] });
@@ -240,7 +240,9 @@ async function searchPipeline({ struct, text, profile, feedback, limit, wardrobe
   // Домашний мост: свежий каталог с домашнего ПК (рубильник COLLECTOR_ENABLED,
   // протухает за 24ч — дальше молча исчезает, ничего не роняя).
   // Стоит ПОСЛЕ let source: метке нужен объявленный source, иначе TDZ.
-  let source = CFG.dataSource;
+  // Дефолт — 'demo': метка отражает факт содержимого, а не конфиг
+  // (иначе hybrid светился бы даже при полностью заблокированном WB).
+  let source = 'demo';
   try {
     const HF = require('./homefeed');
     const rows = HF.getItems();
@@ -252,21 +254,27 @@ async function searchPipeline({ struct, text, profile, feedback, limit, wardrobe
       cands.sort((a, b) => b.aiScore - a.aiScore);
       cands = cands.slice(0, limit || 20);
       total += hfRanked.length;
-      if (source === CFG.dataSource) source = 'homefeed';
+      if (source === 'demo') source = 'homefeed';
     }
   } catch (e) { /* мост недоступен — идём дальше без него */ }
-  // hybrid: воронка живья WB (веер × 1 страница, до ~50) → топ-50.
+  // hybrid/live: веер запросов × страницы (до ~150 кандидатов с WB) →
+  // скоринг всех → топ-50. Долгий WB режем по общему таймауту 12с и молча
+  // откатываемся на остальное — чат не должен висеть.
   if (CFG.dataSource === 'hybrid') {
     try {
-      const queries = (text && text.trim()) ? [text.trim()] : M.structToQueries(struct || {});
-      const live = await M.funnelSearch(queries, 5, 1);
+      const base = (text && text.trim()) ? [text.trim()] : [];
+      const vars = M.structToQueries(struct || {});
+      const queries = base.concat(vars.filter((qq) => !base.includes(qq))).slice(0, 3);
+      const wait = (ms) => new Promise((res) => setTimeout(() => res([]), ms));
+      const live = await Promise.race([M.funnelSearch(queries, 25, 2), wait(12000)]);
       if (live.length) {
         const ctx = scoreCtx(profile, feedback, { occasion: struct && struct.occasion, wardrobe: wardrobe || [] });
-        const scored = M.scoreLive(live.slice(0, 1), ctx).slice(0, 1);
+        const scored = M.scoreLive(live.slice(0, 150), ctx);
         const fresh = await ensureLiveAnalyses(scored);
         Object.assign(analyses, fresh);
         const ids = new Set(scored.map((x) => x.id));
         cands = scored.concat(cands.filter((x) => !ids.has(x.id))).slice(0, limit || 50);
+        total += live.length;
         source = 'hybrid';
       }
     } catch (e) { /* тихий fallback на демо; frontend покажет пометку */ }
@@ -361,7 +369,7 @@ async function chat({ message, conversationId, profile, feedback, uid, wardrobe,
     out = { intent: 'find_similar', searchCriteria: crit, suggestQuery: seen.query, message: text, products: pipe.items, total: pipe.total, conversationId: cid, aiMode: Q.isConfigured(CFG.qwen.stylist) ? 'production' : 'demo', seen };
   } else if (!Q.isConfigured(CFG.qwen.stylist)) {
     const d = demoBrain(msg, profile, ctx);
-    const pipe = await searchPipeline({ struct: d.searchCriteria, profile, feedback, limit: 50, wardrobe: wr });
+    const pipe = await searchPipeline({ struct: d.searchCriteria, text: msg, profile, feedback, limit: 50, wardrobe: wr });
     out = Object.assign({}, d, { products: pipe.items, total: pipe.total, conversationId: cid, aiMode: 'demo' });
   } else {
     // Production: Main AI. При недоступности — тихий откат на demoBrain (§51).
@@ -377,7 +385,7 @@ async function chat({ message, conversationId, profile, feedback, uid, wardrobe,
       const aiCrit = answer.searchCriteria || {};
       const crit = Object.assign({ size: profile.topSize || '' }, base);
       ['category', 'subcategory', 'color', 'maxPrice', 'style', 'occasion'].forEach((k) => { if (aiCrit[k]) crit[k] = aiCrit[k]; });
-      const pipe = await searchPipeline({ struct: crit, profile, feedback, limit: 50, wardrobe: wr });
+      const pipe = await searchPipeline({ struct: crit, text: msg, profile, feedback, limit: 50, wardrobe: wr });
       let text = answer.message;
       if (!text) {
         const bits = [crit.category ? ({ top: 'верх', bottom: 'низ', shoes: 'обувь', acc: 'аксессуары' })[crit.category] : '', crit.color, crit.maxPrice ? 'до ' + Number(crit.maxPrice).toLocaleString('ru-RU') + ' ₽' : ''].filter(Boolean);
@@ -387,7 +395,7 @@ async function chat({ message, conversationId, profile, feedback, uid, wardrobe,
     } catch (e) {
       if (e.code === 'BAD_JSON') throw e;
       const d = demoBrain(msg, profile, ctx);
-      const pipe = await searchPipeline({ struct: d.searchCriteria, profile, feedback, limit: 50, wardrobe: wr });
+      const pipe = await searchPipeline({ struct: d.searchCriteria, text: msg, profile, feedback, limit: 50, wardrobe: wr });
       const prefix = e.code === 'NO_FUNDS' ? 'Баланс шлюза на нуле — пополни счёт, и отвечу по-настоящему. А пока: ' : '';
       out = Object.assign({}, d, { message: prefix + d.message, products: pipe.items, total: pipe.total, conversationId: cid, aiMode: 'demo-fallback' });
     }

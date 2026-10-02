@@ -61,7 +61,7 @@ const Api = {
     } finally { clearTimeout(t); }
   },
   get: (p) => Api.req(p, { method: 'GET' }),
-  post: (p, b) => Api.req(p, { method: 'POST', body: JSON.stringify(b || {}) })
+  post: (p, b, ms) => Api.req(p, { method: 'POST', body: JSON.stringify(b || {}) }, ms)
 };
 const RC = {}; // товары из ответов AI (сессия)
 
@@ -668,7 +668,8 @@ async function askAI(text, img) {
     go('results');
   };
   try {
-    const r = await Api.post('/api/ai/chat', { message: text, conversationId: S.cid, image: img || null });
+    /* Лайв-режим: сервер до 12с ждёт WB + Takprodam + AI — даём 45с, иначе оборвём рабочий запрос. */
+    const r = await Api.post('/api/ai/chat', { message: text, conversationId: S.cid, image: img || null }, 45000);
     const d = r.data || {};
     S.cid = d.conversationId || S.cid;
     (d.products || []).forEach((p) => { RC[p.id] = p; });
