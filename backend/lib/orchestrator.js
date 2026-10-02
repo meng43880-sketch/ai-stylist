@@ -279,6 +279,37 @@ async function searchPipeline({ struct, text, profile, feedback, limit, wardrobe
       }
     } catch (e) { /* тихий fallback на демо; frontend покажет пометку */ }
   }
+  /* MVP-полнота: строгие фильтры дали < 8 — добираем relaxed-проходом
+     (та же категория, без цвета/подкатегории, цена ×1.5). Лучше релевантное
+     рядом, чем пустая полка из двух штук. */
+  if (cands.length < 8) {
+    try {
+      const rxCat = struct.category || '';
+      const rxMax = struct.maxPrice ? Math.round(struct.maxPrice * 1.5) : null;
+      const pool = [];
+      try {
+        const D = require('./datasets');
+        const rows = await D.ensureLoaded();
+        pool.push(...D.searchRows(rows, { category: rxCat, maxPrice: rxMax, limit: 200 }).items);
+      } catch (e) {}
+      try {
+        const HF = require('./homefeed');
+        HF.getItems().forEach((p) => {
+          if (rxCat && p.cat !== rxCat) return;
+          if (rxMax != null && p.price > rxMax) return;
+          pool.push(p);
+        });
+      } catch (e) {}
+      if (pool.length) {
+        const rctx = scoreCtx(profile, feedback, { occasion: struct && struct.occasion, wardrobe: wardrobe || [] });
+        const ranked = R.rankProducts(pool, rctx);
+        const seenR = new Set(cands.map((x) => x.id));
+        ranked.forEach((x) => { if (!seenR.has(x.id)) { seenR.add(x.id); cands.push(x); } });
+        cands.sort((a, b) => b.aiScore - a.aiScore);
+        cands = cands.slice(0, limit || 20);
+      }
+    } catch (e) {}
+  }
   return { total, items: cands, analyses, source };
 }
 
