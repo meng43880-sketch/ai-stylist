@@ -28,11 +28,14 @@ function readCard(el) {
     if (!m) return null;
     const id = +m[1];
     const img = el.querySelector('img');
+    /* currentSrc — выбранный из srcset реальный URL; отбрасываем data: и пустышки. */
+    let src = img ? (img.currentSrc || img.src || img.dataset.src || img.getAttribute('data-src') || '') : '';
+    if (!src || src.startsWith('data:') || src.length < 20) src = '';
     const title = (img && img.alt) || (el.querySelector('.product-card__name') || {}).textContent || '';
     const priceEl = el.querySelector('.price__lower-price') || el.querySelector('ins') || el.querySelector('.lower-price');
     const price = priceEl ? parseInt(String(priceEl.textContent).replace(/[^\d]/g, '')) || 0 : 0;
     if (!title.trim() || !price) return null;
-    return { id, title: title.trim().slice(0, 120), price, img: (img && (img.src || img.dataset.src)) || '' };
+    return { id, title: title.trim().slice(0, 120), price, img: src };
   } catch (e) { return null; }
 }
 async function humanSearch(query) {

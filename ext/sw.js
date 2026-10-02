@@ -87,7 +87,10 @@ async function runCollect() {
       const list = (t.res.items || []).map((c) => ({
         id: 'wb' + c.id, nmId: c.id, title: String(c.title || '').slice(0, 120),
         price: c.price, old: Math.round(c.price * 1.2),
-        img: wbPhoto(c.id), mp: 'WB', brand: '',
+        /* Фото из DOM карточки (верный хост) с подъёмом tm→big;
+           конструктор basket — только запасной (таблица хостов дрейфует). */
+        img: (c.img && c.img.includes('/photos/')) ? c.img.replace('/tm/', '/big/') : wbPhoto(c.id),
+        mp: 'WB', brand: '',
         cat: wbCat(c.title), colors: [], sizes: ['One'], styles: [], fit: 'regular',
         rating: 0, reviews: 0,
         live: true, source: 'homefeed',
