@@ -4,12 +4,12 @@
    поэтому wbaas их пропускает, а node-скрипты с того же IP — нет.
    Пуш — на POST {backend}/api/collector/push с секретом (CORS открыт
    только для /api/collector/*). Пауза 2.5с между запросами. */
+/* Режим человека: 8 широких запросов × ~30 карточек ≈ 150-200 за ~1.5 мин.
+   Узкие (шапки/ремни) добирают Takprodam и датасет — гнать человека
+   по 30 запросам (5+ мин) смысла нет. */
 const QUERIES = [
-  'футболка', 'худи', 'джинсы', 'кроссовки', 'куртка', 'рубашка',
-  'брюки', 'свитшот', 'кеды', 'пальто', 'джемпер', 'чиносы',
-  'бомбер', 'лонгслив', 'карго', 'ботинки', 'кепка', 'рюкзак',
-  'платье', 'юбка', 'ветровка', 'пуховик', 'толстовка', 'кроссовки белые',
-  'шапка', 'шарф', 'перчатки', 'носки', 'ремень', 'очки'
+  'футболка', 'худи', 'джинсы', 'кроссовки',
+  'куртка', 'платье', 'рубашка', 'брюки'
 ];
 const PER_QUERY = 30;
 const PAUSE_MS = 2500;
@@ -24,22 +24,6 @@ function wbCat(name) {
   const s = String(name || '').toLowerCase();
   for (const [k, v] of CATS) if (s.includes(k)) return v;
   return 'top';
-}
-function norm(raw) {
-  const id = raw.id || raw.nmId;
-  if (!id) return null;
-  const price = Math.round((raw.salePriceU != null ? raw.salePriceU : raw.salePrice) / 100) || 0;
-  if (!price) return null;
-  const old = Math.round((raw.priceU != null ? raw.priceU : raw.price) / 100) || price;
-  return {
-    id: 'wb' + id, nmId: id, title: String(raw.name || 'Товар').slice(0, 120),
-    price, old: old > price ? old : Math.round(price * 1.2),
-    img: wbPhoto(id), mp: 'WB', brand: String(raw.brand || '').slice(0, 40),
-    cat: wbCat(raw.name), colors: [], sizes: ['One'], styles: [], fit: 'regular',
-    rating: Number(raw.reviewRating || raw.rating) || 0, reviews: Number(raw.feedbacks || 0),
-    live: true, source: 'homefeed', url: `https://www.wildberries.ru/catalog/${id}/detail.aspx`,
-    fetchedAt: Date.now(), desc: ''
-  };
 }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function log(msg) {
@@ -95,16 +79,22 @@ async function runCollect() {
   const closeTab = async () => { if (mine && tabId) { try { await chrome.tabs.remove(tabId); } catch (e) {} mine = false; } };
   for (const qq of QUERIES) {
     try {
-      /* Запрос выполняет вкладка wildberries.ru: родной origin + куки —
-         для wbaas неотличимо от работы сайта. */
-      const url = 'https://search.wb.ru/exactmatch/ru/common/v18/search?ab_testing=false&appType=1&curr=rub&dest=-1257786&page=1&query='
-        + encodeURIComponent(qq) + '&resultset=catalog&sort=popular&spp=' + PER_QUERY + '&suppressSpellcheck=false';
-      const t = await wbTabSend('wbFetch', url);
+      /* Вкладка ПЕЧАТАЕТ запрос в поиск WB как человек и читает DOM выдачи.
+         Медленно (~10с), зато для wbaas неотличимо от ручной работы. */
+      const t = await wbTabSend('humanSearch', qq);
       tabId = t.tabId; mine = t.mine;
       if (!t.res || !t.res.ok) throw new Error((t.res && t.res.error) || 'пусто');
-      const j = t.res.data;
-      const list = (j && j.data && j.data.products) || [];
-      list.map(norm).filter(Boolean).forEach((p) => { if (!seen.has(p.id)) { seen.add(p.id); out.push(p); } });
+      const list = (t.res.items || []).map((c) => ({
+        id: 'wb' + c.id, nmId: c.id, title: String(c.title || '').slice(0, 120),
+        price: c.price, old: Math.round(c.price * 1.2),
+        img: wbPhoto(c.id), mp: 'WB', brand: '',
+        cat: wbCat(c.title), colors: [], sizes: ['One'], styles: [], fit: 'regular',
+        rating: 0, reviews: 0,
+        live: true, source: 'homefeed',
+        url: `https://www.wildberries.ru/catalog/${c.id}/detail.aspx`,
+        fetchedAt: Date.now(), desc: ''
+      })).filter((p) => p.title && p.price > 0);
+      list.forEach((p) => { if (!seen.has(p.id)) { seen.add(p.id); out.push(p); } });
       fails = 0;
       await log('+ ' + qq + ': ' + list.length + ' (всего ' + out.length + ')');
     } catch (e) {
