@@ -54,8 +54,9 @@ h1,h2,h3,p{margin:0}
 .hero-full .shade::after{content:'';position:absolute;inset:0;background:linear-gradient(120deg,rgba(255,46,166,.18),rgba(46,91,255,.18));mix-blend-mode:overlay}
 .hero-full .top{position:relative;z-index:2;display:flex;justify-content:center;padding-top:56px}
 .hero-full .body{position:relative;z-index:2;margin-top:auto;padding:22px 24px 30px;color:#fff}
-.hero-full .brand{font-size:22px;font-weight:700;letter-spacing:-.02em;color:#fff;margin-bottom:10px}
-.hero-full .brand::after{content:'';display:block;width:28px;height:3px;border-radius:3px;background:var(--grad);margin-top:8px}
+.hero-full .topbar{position:relative;z-index:2;display:flex;align-items:center;padding:calc(54px + env(safe-area-inset-top)) 24px 0}
+.hero-full .wordmark{font-size:18px;font-weight:700;letter-spacing:-.02em;color:rgba(255,255,255,.96);display:inline-flex;align-items:center;gap:9px}
+.hero-full .wordmark::before{content:'';width:9px;height:9px;border-radius:50%;background:var(--grad);box-shadow:0 0 12px rgba(123,59,255,.8)}
 .hero-full h1{font-size:44px;font-weight:700;letter-spacing:-.025em;line-height:1.04;margin:0}
 .hero-full h1 em{font-style:normal;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
 .hero-full p{margin:12px 0 0;font-size:15px;line-height:1.55;color:rgba(255,255,255,.85);max-width:300px}
