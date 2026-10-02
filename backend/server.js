@@ -62,7 +62,7 @@ function authUid(req) {
   return u.id;
 }
 /* Публичные ручки (без токена). Всё остальное /api — только со входом. */
-const PUBLIC_API = ['/api/status', '/api/context', '/api/market/wb/search', '/api/market/ozon/search', '/api/market/link'];
+const PUBLIC_API = ['/api/status', '/api/context', '/api/market/wb/search', '/api/market/ozon/search', '/api/market/link', '/api/collector/push', '/api/collector/status'];
 
 async function route(req, res) {
   const url = new URL(req.url, 'http://x');
@@ -247,6 +247,21 @@ async function route(req, res) {
       const struct = b.struct || {};
       const scored = M.scoreLive(items, O.scoreCtx(profile(U), feedback(U), { occasion: struct.occasion, wardrobe: U.wardrobe }));
       return send(res, 200, { ok: true, items: scored });
+    }
+    /* --- collector: домашний мост каталога. Авторизация — секретом
+       x-collector-key (не user-токеном), рубильник — COLLECTOR_ENABLED. --- */
+    if ((m === 'POST' && p === '/api/collector/push') || (m === 'GET' && p === '/api/collector/status')) {
+      const HF = require('./lib/homefeed');
+      if (m === 'GET') return send(res, 200, { ok: true, data: HF.stats() });
+      const key = String(req.headers['x-collector-key'] || '');
+      if (!process.env.COLLECTOR_KEY || key !== process.env.COLLECTOR_KEY)
+        return send(res, 403, { ok: false, code: 'AUTH', error: 'Нет доступа' });
+      if (!HF.enabled()) return send(res, 503, { ok: false, code: 'DISABLED', error: 'Мост выключен (COLLECTOR_ENABLED)' });
+      const b = await readBody(req);
+      if (!Array.isArray(b.items)) return send(res, 400, { ok: false, error: 'Нужен items[]' });
+      const out = HF.setItems(b.items);
+      logHistory('collector', `Мост: принято ${out.accepted}`, uid);
+      return send(res, 200, { ok: true, data: out });
     }
     /* Партнёрская обёртка ссылки: frontend зовёт перед открытием магазина. */
     if (m === 'GET' && p === '/api/market/link') {

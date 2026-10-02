@@ -237,7 +237,24 @@ async function searchPipeline({ struct, text, profile, feedback, limit, wardrobe
       total += tp.total;
     }
   } catch (e) { /* нет токена или API легло — молча дальше */ }
+  // Домашний мост: свежий каталог с домашнего ПК (рубильник COLLECTOR_ENABLED,
+  // протухает за 24ч — дальше молча исчезает, ничего не роняя).
+  // Стоит ПОСЛЕ let source: метке нужен объявленный source, иначе TDZ.
   let source = CFG.dataSource;
+  try {
+    const HF = require('./homefeed');
+    const rows = HF.getItems();
+    if (rows.length) {
+      const hfCtx = scoreCtx(profile, feedback, { occasion: struct && struct.occasion, wardrobe: wardrobe || [] });
+      const hfRanked = R.rankProducts(rows, hfCtx);
+      const seen2 = new Set(cands.map((x) => x.id));
+      hfRanked.forEach((x) => { if (!seen2.has(x.id)) { seen2.add(x.id); cands.push(x); } });
+      cands.sort((a, b) => b.aiScore - a.aiScore);
+      cands = cands.slice(0, limit || 20);
+      total += hfRanked.length;
+      if (source === CFG.dataSource) source = 'homefeed';
+    }
+  } catch (e) { /* мост недоступен — идём дальше без него */ }
   // hybrid: воронка живья WB (веер × 1 страница, до ~50) → топ-50.
   if (CFG.dataSource === 'hybrid') {
     try {
