@@ -60,7 +60,9 @@ async function runCollect() {
     try {
       const url = 'https://search.wb.ru/exactmatch/ru/common/v18/search?ab_testing=false&appType=1&curr=rub&dest=-1257786&page=1&query='
         + encodeURIComponent(qq) + '&resultset=catalog&sort=popular&spp=' + PER_QUERY + '&suppressSpellcheck=false';
-      const r = await fetch(url);
+      /* credentials:include — шлём куки сессии wildberries.ru из браузера:
+         без них wbaas режет даже из живого Chrome (HTTP 403). */
+      const r = await fetch(url, { credentials: 'include' });
       if (!r.ok) throw new Error('HTTP ' + r.status);
       const j = await r.json();
       const list = (j && j.data && j.data.products) || [];
