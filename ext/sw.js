@@ -49,19 +49,31 @@ async function log(msg) {
 }
 /* Вкладка WB для запросов: ищем открытую, иначе открываем фоновую сами.
    Ждём готовности content.js (пинг до 12с), в конце свою вкладку закрываем. */
+async function ping(tabId, tries) {
+  for (let i = 0; i < tries; i++) {
+    try {
+      const pong = await chrome.tabs.sendMessage(tabId, { type: 'wbPing' });
+      if (pong && pong.ok) return true;
+    } catch (e) { /* ещё грузится */ }
+    await sleep(1000);
+  }
+  return false;
+}
 async function wbTabSend(type, url) {
+  /* Старые вкладки (открыты до обновления расширения) скрипта не имеют —
+     их не ждём дольше 3с, а открываем свежую. */
   const tabs = await chrome.tabs.query({ url: 'https://www.wildberries.ru/*' });
-  let tab = tabs[0], mine = false;
+  let tab = null, mine = false;
+  for (const t of tabs) {
+    if (await ping(t.id, 3)) { tab = t; break; }
+  }
   if (!tab) {
     tab = await chrome.tabs.create({ url: 'https://www.wildberries.ru/', active: false });
     mine = true;
-  }
-  for (let i = 0; i < 12; i++) {
-    try {
-      const pong = await chrome.tabs.sendMessage(tab.id, { type: 'wbPing' });
-      if (pong && pong.ok) break;
-    } catch (e) { /* ещё грузится */ }
-    await sleep(1000);
+    if (!await ping(tab.id, 15)) {
+      try { await chrome.tabs.remove(tab.id); } catch (e) {}
+      throw new Error('Вкладка WB не отвечает — обнови страницу WB (F5) и повтори');
+    }
   }
   try {
     const res = await chrome.tabs.sendMessage(tab.id, { type, url });
