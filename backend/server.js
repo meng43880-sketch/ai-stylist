@@ -250,7 +250,12 @@ async function route(req, res) {
     }
     /* --- collector: домашний мост каталога. Авторизация — секретом
        x-collector-key (не user-токеном), рубильник — COLLECTOR_ENABLED. --- */
-    if ((m === 'POST' && p === '/api/collector/push') || (m === 'GET' && p === '/api/collector/status')) {
+    if ((m === 'POST' && p === '/api/collector/push') || (m === 'GET' && p === '/api/collector/status') || (m === 'OPTIONS' && p.startsWith('/api/collector/'))) {
+      /* Расширение ходит с chrome-extension:// origin — отдаём CORS только этой ветке. */
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-collector-key');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      if (m === 'OPTIONS') { res.writeHead(200); res.end(); return; }
       const HF = require('./lib/homefeed');
       if (m === 'GET') return send(res, 200, { ok: true, data: HF.stats() });
       const key = String(req.headers['x-collector-key'] || '');

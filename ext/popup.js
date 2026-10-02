@@ -1,0 +1,23 @@
+'use strict';
+const $ = (id) => document.getElementById(id);
+(async () => {
+  const cfg = await chrome.storage.local.get(['backend', 'key']);
+  if (cfg.backend) $('backend').value = cfg.backend;
+  if (cfg.key) $('key').value = cfg.key;
+  const draw = async () => {
+    const o = await chrome.storage.local.get(['log', 'running', 'lastRun', 'lastCount']);
+    $('log').innerHTML = (o.log || []).slice(-12).map((s) => `<div>${s}</div>`).join('');
+    $('go').disabled = !!o.running;
+    $('go').textContent = o.running ? 'Собираю…' : 'Собрать и отправить';
+    $('st').textContent = o.lastRun
+      ? `Прошлый прогон: ${new Date(o.lastRun).toLocaleString()}, товаров: ${o.lastCount || 0}. Автопрогон — каждые 6 ч.`
+      : 'Ещё не запускалось. Автопрогон — каждые 6 ч.';
+  };
+  await draw();
+  setInterval(draw, 2000);
+  $('go').onclick = async () => {
+    await chrome.storage.local.set({ backend: $('backend').value.trim(), key: $('key').value.trim(), log: [] });
+    chrome.runtime.sendMessage({ type: 'collect' });
+    await draw();
+  };
+})();

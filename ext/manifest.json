@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "sainvio collector",
+  "version": "1.0.0",
+  "description": "Домашний сборщик каталога WB для sainvio: идёт из живого браузера, wbaas пропускает",
+  "permissions": ["storage", "alarms"],
+  "host_permissions": [
+    "https://search.wb.ru/*",
+    "https://*.onrender.com/*",
+    "http://127.0.0.1:8001/*"
+  ],
+  "background": {
+    "service_worker": "sw.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "sainvio collector"
+  }
+}
