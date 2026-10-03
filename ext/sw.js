@@ -159,7 +159,17 @@ async function runLiveQuery(query) {
     tabId = t.tabId; mine = t.mine;
     if (!t.res || !t.res.ok) return { items: [] };
     const items = (t.res.items || []).map(mapHuman).filter((p) => p.title && p.price > 0).slice(0, 30);
-    await log('live «' + query.slice(0, 30) + '»: ' + items.length + ' за ' + Math.round((Date.now() - t0) / 1000) + 'с');
+    /* Автопочинка фото свежих — сразу, без кнопки. С потолком 20с:
+       что не успело — добьёт каскад в показе, выдача не ждёт. */
+    try {
+      const healed = await Promise.race([
+        healList(items, null),
+        sleep(20000).then(() => [])
+      ]);
+      await log('live «' + query.slice(0, 30) + '»: ' + items.length + ', фото чинено ' + healed.length + ' за ' + Math.round((Date.now() - t0) / 1000) + 'с');
+    } catch (e) {
+      await log('live «' + query.slice(0, 30) + '»: ' + items.length + ' (без чинки)');
+    }
     return { items };
   } catch (e) {
     await log('live ERR ' + e.message);
