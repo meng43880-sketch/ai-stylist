@@ -53,7 +53,7 @@ async function ping(tabId, tries) {
   }
   return false;
 }
-async function wbTabSend(type, url, query) {
+async function wbTabSend(type, url, query, fast) {
   /* Старые вкладки (открыты до обновления расширения) скрипта не имеют —
      их не ждём дольше 3с, а открываем свежую. */
   const tabs = await chrome.tabs.query({ url: 'https://www.wildberries.ru/*' });
@@ -70,7 +70,7 @@ async function wbTabSend(type, url, query) {
     }
   }
   try {
-    const res = await chrome.tabs.sendMessage(tab.id, { type, url, query });
+    const res = await chrome.tabs.sendMessage(tab.id, { type, url, query, fast: !!fast });
     return { res, mine, tabId: tab.id };
   } catch (e) {
     if (mine) { try { await chrome.tabs.remove(tab.id); } catch (ee) {} }
@@ -149,7 +149,7 @@ async function runLiveQuery(query) {
   const closeTab = async () => { if (mine && tabId) { try { await chrome.tabs.remove(tabId); } catch (e) {} mine = false; } };
   const t0 = Date.now();
   try {
-    const t = await wbTabSend('humanSearch', null, String(query).slice(0, 60));
+    const t = await wbTabSend('humanSearch', null, String(query).slice(0, 60), true);
     tabId = t.tabId; mine = t.mine;
     if (!t.res || !t.res.ok) return { items: [] };
     const items = (t.res.items || []).map(mapHuman).filter((p) => p.title && p.price > 0).slice(0, 30);

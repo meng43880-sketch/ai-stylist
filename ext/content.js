@@ -40,7 +40,8 @@ function readCard(el) {
     return { id, title: title.trim().slice(0, 120), price, img: src };
   } catch (e) { return null; }
 }
-async function humanSearch(query) {
+async function humanSearch(query, opts) {
+  const fast = !!(opts && opts.fast);
   const input = findSearchInput();
   if (!input) throw new Error('нет строки поиска на странице');
   input.focus();
@@ -62,10 +63,11 @@ async function humanSearch(query) {
     if (cards.length >= 10) break;
   }
   /* Ленивая загрузка: без прокрутки половина img — пустышки (data:),
-     и сборщик уносит мусор вместо фото. Скроллим всю выдачу ступенями. */
+     и сборщик уносит мусор вместо фото. Скроллим всю выдачу ступенями.
+     fast (полоса под запрос): верха достаточно, скролл пропускаем. */
   try {
     /* Хватает и верха выдачи: дальше 15 карточек уже есть — не скроллим. */
-    if (findCards().length < 15) {
+    if (!fast && findCards().length < 15) {
       const h = document.body.scrollHeight;
       for (let s = 1; s <= 3; s++) {
         window.scrollTo(0, Math.round((h / 3) * s));
@@ -82,7 +84,7 @@ async function humanSearch(query) {
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg && msg.type === 'wbPing') { sendResponse({ ok: true }); return; }
   if (msg && msg.type === 'humanSearch') {
-    humanSearch(msg.query)
+    humanSearch(msg.query, { fast: !!msg.fast })
       .then((items) => sendResponse({ ok: true, items }))
       .catch((e) => sendResponse({ ok: false, error: String((e && e.message) || e) }));
     return true;
