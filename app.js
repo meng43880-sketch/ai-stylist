@@ -731,28 +731,29 @@ async function askAI(text, img) {
         patch.live = (s.items || []).slice(0, 10).map((p) => p.id);
       } else patch.liveBlocked = true;
     } catch (e) { patch.liveBlocked = true; }
-    /* Свежая полоса от расширения-человека: до 30 под этот запрос — в живьё. */
-    try {
-      const ex = await Promise.race([extP, new Promise((res) => setTimeout(() => res([]), 45000))]);
-      if (ex.length) {
-        const mergeLive = (ids) => {
-          patch.live = patch.live || [];
-          const seenL = new Set(patch.live);
-          ids.forEach((id) => { if (RC[id] && !seenL.has(id)) { seenL.add(id); patch.live.push(id); } });
-          patch.live = patch.live.slice(0, 12);
-        };
+    /* Свежая полоса от расширения — НЕ ждём: базу показываем сразу (fin),
+       живьё доклеится в открытую страницу, когда приедет. Так было 46с. */
+    fin(patch);
+    extP.then(async (ex) => {
+      if (!ex.length) return;
+      try {
         try {
           const s = await Api.post('/api/market/score', { items: ex.slice(0, 30), struct: {} });
           (s.items || []).forEach((p) => { RC[p.id] = p; });
-          mergeLive((s.items || []).map((p) => p.id));
         } catch (se) {
           const fb2 = demoFb();
           ex.slice(0, 30).forEach((p) => { try { const rr = Demo.score(p, S.profile, fb2); RC[p.id] = Object.assign({}, p, { aiScore: rr.score, aiParts: rr.parts }); } catch (ee) {} });
-          mergeLive(ex.slice(0, 30).map((p) => p.id));
         }
-      }
-    } catch (e) {}
-    fin(patch);
+        const lr = S.lastResult;
+        if (!lr) return;
+        lr.live = lr.live || [];
+        const seenL = new Set(lr.live);
+        ex.slice(0, 30).forEach((p) => { if (RC[p.id] && !seenL.has(p.id)) { seenL.add(p.id); lr.live.push(p.id); } });
+        lr.live = lr.live.slice(0, 12);
+        if (S.route === 'results') render();
+      } catch (e) {}
+    });
+    return;
   } catch (e) {
     /* Нет backend (статический хостинг): локальный демо-мозг + живьём с WB. */
     try {

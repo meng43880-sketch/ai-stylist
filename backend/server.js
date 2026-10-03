@@ -257,7 +257,13 @@ async function route(req, res) {
       res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
       if (m === 'OPTIONS') { res.writeHead(200); res.end(); return; }
       const HF = require('./lib/homefeed');
-      if (m === 'GET') return send(res, 200, { ok: true, data: HF.stats() });
+      if (m === 'GET') {
+        const st = HF.stats();
+        if (url.searchParams.get('peek')) {
+          st.sample = HF.getItems().slice(0, 3).map((p) => ({ id: p.id, title: p.title, img: p.img, url: p.url }));
+        }
+        return send(res, 200, { ok: true, data: st });
+      }
       const key = String(req.headers['x-collector-key'] || '');
       if (!process.env.COLLECTOR_KEY || key !== process.env.COLLECTOR_KEY)
         return send(res, 403, { ok: false, code: 'AUTH', error: 'Нет доступа' });
