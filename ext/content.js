@@ -30,7 +30,9 @@ function readCard(el) {
     const img = el.querySelector('img');
     /* currentSrc — выбранный из srcset реальный URL; отбрасываем data: и пустышки. */
     let src = img ? (img.currentSrc || img.src || img.dataset.src || img.getAttribute('data-src') || '') : '';
-    if (!src || src.startsWith('data:') || src.length < 20) src = '';
+    /* Отсекаем заглушки ленивой загрузки: data-пиксели, стабы, короткие ссылки. */
+    if (!src || src.startsWith('data:') || src.length < 20
+      || /stub|placeholder|pixel|blank|1x1|lazy/i.test(src)) src = '';
     const title = (img && img.alt) || (el.querySelector('.product-card__name') || {}).textContent || '';
     const priceEl = el.querySelector('.price__lower-price') || el.querySelector('ins') || el.querySelector('.lower-price');
     const price = priceEl ? parseInt(String(priceEl.textContent).replace(/[^\d]/g, '')) || 0 : 0;
@@ -59,7 +61,18 @@ async function humanSearch(query) {
     cards = findCards();
     if (cards.length >= 10) break;
   }
-  try { window.scrollTo(0, document.body.scrollHeight / 3); await HSLEEP(1200); window.scrollTo(0, 0); } catch (e) {}
+  /* Ленивая загрузка: без прокрутки половина img — пустышки (data:),
+     и сборщик уносит мусор вместо фото. Скроллим всю выдачу ступенями. */
+  try {
+    const h = document.body.scrollHeight;
+    for (let s = 1; s <= 5; s++) {
+      window.scrollTo(0, Math.round((h / 5) * s));
+      await HSLEEP(700);
+      if (findCards().length >= 25) break;
+    }
+    window.scrollTo(0, 0);
+    await HSLEEP(400);
+  } catch (e) {}
   cards = findCards();
   return cards.slice(0, 30).map(readCard).filter(Boolean);
 }
