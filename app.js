@@ -215,7 +215,7 @@ let S = {
   ctx: { season: 'autumn', weather: null },
   ob: { styles: [] }, greeted: false,
   token: null, login: '', authMode: 'login', authErr: '',
-  photoConsent: false
+  photoConsent: false, measures: { chest: null, waist: null, hips: null, shoulder: null }
 };
 try {
   const raw = localStorage.getItem(LS) || localStorage.getItem(LS_LEGACY);
@@ -223,7 +223,7 @@ try {
 } catch (e) {}
 S.route = (S.done && S.token) ? 'home' : 'welcome'; S.params = {};
 function save() {
-  try { localStorage.setItem(LS, JSON.stringify({ profile: S.profile, photo: S.photo, photoConsent: S.photoConsent, aiNote: S.aiNote, done: S.done, favorites: S.favorites, savedOutfits: S.savedOutfits, chat: S.chat.slice(-30).map((m) => { const c = Object.assign({}, m); delete c.img; return c; }), cid: S.cid, ob: S.ob, greeted: S.greeted, token: S.token, login: S.login, aiModel: S.aiModel })); } catch (e) {}
+  try { localStorage.setItem(LS, JSON.stringify({ profile: S.profile, photo: S.photo, photoConsent: S.photoConsent, measures: S.measures, aiNote: S.aiNote, done: S.done, favorites: S.favorites, savedOutfits: S.savedOutfits, chat: S.chat.slice(-30).map((m) => { const c = Object.assign({}, m); delete c.img; return c; }), cid: S.cid, ob: S.ob, greeted: S.greeted, token: S.token, login: S.login, aiModel: S.aiModel })); } catch (e) {}
 }
 
 /* ---------- router ---------- */
@@ -321,6 +321,7 @@ async function pullServer() {
   try {
     const r = await Api.get('/api/profile');
     if (r.profile) { S.profile = r.profile; S.done = true; }
+    if (r.measures) S.measures = Object.assign({ chest: null, waist: null, hips: null, shoulder: null }, r.measures);
     try { const f = await Api.get('/api/favorites'); S.favorites = f.favorites || []; } catch (e) {}
     try { const w = await Api.get('/api/wardrobe'); S.wardrobe = { items: w.items || [], insights: w.insights || null }; } catch (e) {}
     save();
@@ -383,6 +384,10 @@ function vParams() {
     <div class="grid3"><div class="field"><label>Верх</label><input class="input" id="f_top" value="${esc(p.topSize)}" placeholder="M"></div>
     <div class="field"><label>Низ</label><input class="input" id="f_pa" value="${esc(p.pantsSize)}" placeholder="31"></div>
     <div class="field"><label>Обувь</label><input class="input" id="f_sh" value="${esc(p.shoeSize)}" placeholder="42"></div></div>
+    <div class="field"><label>Точные мерки, см · необязательно, но подбор будет точнее</label></div>
+    <div class="grid3"><div class="field"><label>Грудь</label><input class="input" id="f_chest" type="number" value="${esc((S.measures && S.measures.chest) || '')}" placeholder="100"></div>
+    <div class="field"><label>Талия</label><input class="input" id="f_waist" type="number" value="${esc((S.measures && S.measures.waist) || '')}" placeholder="84"></div>
+    <div class="field"><label>Бёдра</label><input class="input" id="f_hips" type="number" value="${esc((S.measures && S.measures.hips) || '')}" placeholder="102"></div></div>
     <div style="height:16px"></div>
     <button class="btn" onclick="saveParams()">Дальше</button><div style="height:24px"></div></div>`;
 }
@@ -402,9 +407,17 @@ window.saveParams = function () {
     name, height, weight,
     topSize: g('f_top'), pantsSize: g('f_pa'), shoeSize: g('f_sh')
   });
+  const num = (id, lo, hi) => {
+    const v = parseInt(g(id)) || 0;
+    return (v >= lo && v <= hi) ? v : null;
+  };
+  S.measures = Object.assign({}, S.measures, {
+    chest: num('f_chest', 60, 200), waist: num('f_waist', 50, 200), hips: num('f_hips', 60, 200)
+  });
+  const payload = { profile: S.profile, measures: S.measures };
   if (S.done) {
     save();
-    Api.post('/api/profile', { profile: S.profile }).catch(() => {});
+    Api.post('/api/profile', payload).catch(() => {});
     go('profile');
   } else { save(); go('style'); }
 };
@@ -1261,6 +1274,7 @@ function vProfile() {
       <h1>${esc(p.name)}</h1>
       <p>@${esc(S.login || 'гость')} · ${SEASON_RU[S.ctx.season] || ''}</p>
       <p class="params">${p.height} см · ${p.weight} кг · ${esc(p.topSize)} / ${esc(p.pantsSize)} / ${esc(p.shoeSize)}</p>
+      ${['chest', 'waist', 'hips'].some((k) => (S.measures || {})[k]) ? `<p class="params">Мерки: ${['chest', 'waist', 'hips'].map((k) => (S.measures || {})[k]).filter(Boolean).join(' · ')}</p>` : ''}
     </div>
     <div class="taste">
       <div class="row"><span class="tlabel">Твой вкус</span>${ic('spark', 14)}</div>

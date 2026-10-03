@@ -119,7 +119,7 @@ async function route(req, res) {
     const uid = isPublic ? null : authUid(req);
     const U = uid ? UD(uid) : null;
     /* --- profile --- */
-    if (m === 'GET' && p === '/api/profile') return send(res, 200, { ok: true, profile: profile(U), vision: U.vision || null });
+    if (m === 'GET' && p === '/api/profile') return send(res, 200, { ok: true, profile: profile(U), vision: U.vision || null, measures: U.measures || null });
     /* Frontend исторически шлёт POST — принимаем оба метода, контракт не рвём. */
     if ((m === 'PUT' || m === 'POST') && p === '/api/profile') {
       const b = await readBody(req);
