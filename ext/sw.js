@@ -162,8 +162,10 @@ async function runLiveQuery(query) {
     /* Автопочинка фото свежих — сразу, без кнопки. С потолком 20с:
        что не успело — добьёт каскад в показе, выдача не ждёт. */
     try {
+      const s0 = items[0] || {};
+      await log('образец img: ' + String(s0.img || '(пусто)').slice(0, 120));
       const healed = await Promise.race([
-        healList(items, null),
+        healList(items, async (m) => { await log(m); }),
         sleep(20000).then(() => [])
       ]);
       await log('live «' + query.slice(0, 30) + '»: ' + items.length + ', фото чинено ' + healed.length + ' за ' + Math.round((Date.now() - t0) / 1000) + 'с');
