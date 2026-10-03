@@ -28,8 +28,18 @@ function readCard(el) {
     if (!m) return null;
     const id = +m[1];
     const img = el.querySelector('img');
-    /* currentSrc — выбранный из srcset реальный URL; отбрасываем data: и пустышки. */
-    let src = img ? (img.currentSrc || img.src || img.dataset.src || img.getAttribute('data-src') || '') : '';
+    /* Берём самый большой кандидат из srcset — его заявил сам WB, он существует.
+       Никаких подмен tm→big: сконструированные URL — главный источник битых фото. */
+    let src = '';
+    try {
+      const ss = img ? (img.getAttribute('srcset') || '') : '';
+      if (ss) {
+        const parts = ss.split(',').map((s) => s.trim().split(/\s+/)[0]).filter((u) => u && !u.startsWith('data:'));
+        if (parts.length) src = parts[parts.length - 1];
+      }
+    } catch (e) {}
+    if (!src && img) src = img.currentSrc || img.src || img.dataset.src || img.getAttribute('data-src') || '';
+    if (src && src.startsWith('/')) { try { src = new URL(src, location.href).href; } catch (e) { src = ''; } }
     /* Отсекаем заглушки ленивой загрузки: data-пиксели, стабы, короткие ссылки. */
     if (!src || src.startsWith('data:') || src.length < 20
       || /stub|placeholder|pixel|blank|1x1|lazy/i.test(src)) src = '';

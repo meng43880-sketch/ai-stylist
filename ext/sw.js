@@ -128,12 +128,13 @@ async function runCollect() {
   await chrome.storage.local.set({ running: false, lastRun: Date.now(), lastCount: out.length });
 }
 function mapHuman(c) {
+  /* URL как заявил WB (srcset, дословно) — не трогаем и не пересобираем.
+     Конструктор — только если из DOM ничего не вышло. */
+  const verbatim = (c.img && (c.img.includes('/photos/') || c.img.includes('/images/'))) ? c.img : '';
   return {
     id: 'wb' + c.id, nmId: c.id, title: String(c.title || '').slice(0, 120),
     price: c.price, old: Math.round(c.price * 1.2),
-    /* Фото из DOM карточки (верный хост) с подъёмом tm→big;
-       конструктор basket — только запасной (таблица хостов дрейфует). */
-    img: (c.img && c.img.includes('/photos/')) ? c.img.replace('/tm/', '/big/') : wbPhoto(c.id),
+    img: verbatim || wbPhoto(c.id),
     mp: 'WB', brand: '',
     cat: wbCat(c.title), colors: [], sizes: ['One'], styles: [], fit: 'regular',
     rating: 0, reviews: 0,
@@ -211,7 +212,7 @@ async function healList(items, say) {
   items.forEach((p) => {
     const q = parseImg(p.img);
     if (!q) return;
-    if (!groups.has(q.vol)) groups.set(q.vol, { host: q.host, sampleQ: q, list: [] });
+    if (!groups.has(q.vol)) groups.set(q.vol, { host: q.host, sampleQ: q, sampleRaw: String(p.img), list: [] });
     groups.get(q.vol).list.push({ p, q });
   });
   if (say) await say('Томов: ' + groups.size);
@@ -220,8 +221,23 @@ async function healList(items, say) {
   let hostmap = {};
   try { hostmap = (await chrome.storage.local.get('hostmap')).hostmap || {}; } catch (e) {}
   const saveMap = async () => { try { await chrome.storage.local.set({ hostmap }); } catch (e) {} };
+  const applyWin = (vol, g, win) => {
+    const out = [];
+    g.list.forEach(({ p, q }) => {
+      const img = `https://basket-${win.host}.${win.dom}/vol${vol}/part${q.part}/${q.nmId}/${win.path}/big/1.webp`;
+      p.img = img;
+      out.push({ id: p.id, title: p.title, price: p.price, img });
+    });
+    hostmap[vol] = win;
+    return out;
+  };
   const fixed = [];
   for (const [vol, g] of groups) {
+    /* 0) Хранимый URL как есть: уже рабочий — чинка в 1 пробу. */
+    if (await probePhoto(g.sampleRaw)) {
+      if (say) await say(`vol${vol}: URL уже живой, без перебора (${g.list.length} шт)`);
+      continue;
+    }
     const cand = [];
     const known = hostmap[vol];
     if (known) cand.push([known.host, known.dom, known.path]);
@@ -238,12 +254,7 @@ async function healList(items, say) {
       await chrome.storage.local.set({}); // держим воркер живым
     }
     if (win) {
-      g.list.forEach(({ p, q }) => {
-        const img = `https://basket-${win.host}.${win.dom}/vol${vol}/part${q.part}/${q.nmId}/${win.path}/big/1.webp`;
-        p.img = img;
-        fixed.push({ id: p.id, title: p.title, price: p.price, img });
-      });
-      hostmap[vol] = win;
+      fixed.push(...applyWin(vol, g, win));
       if (say) await say(`vol${vol}: хост ${win.host} (${g.list.length} шт)`);
     } else if (say) await say(`vol${vol}: не нашёлся — пропускаю`);
   }
