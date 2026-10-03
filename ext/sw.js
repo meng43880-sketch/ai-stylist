@@ -64,7 +64,7 @@ async function wbTabSend(type, url, query) {
   if (!tab) {
     tab = await chrome.tabs.create({ url: 'https://www.wildberries.ru/', active: false });
     mine = true;
-    if (!await ping(tab.id, 15)) {
+    if (!await ping(tab.id, 8)) {
       try { await chrome.tabs.remove(tab.id); } catch (e) {}
       throw new Error('Вкладка WB не отвечает — обнови страницу WB (F5) и повтори');
     }
