@@ -262,6 +262,9 @@ async function route(req, res) {
         if (url.searchParams.get('peek')) {
           st.sample = HF.getItems().slice(0, 3).map((p) => ({ id: p.id, title: p.title, img: p.img, url: p.url }));
         }
+        if (url.searchParams.get('dump')) {
+          st.dump = HF.getItems().slice(0, 2000).map((p) => ({ id: p.id, title: p.title, price: p.price, img: p.img }));
+        }
         return send(res, 200, { ok: true, data: st });
       }
       const key = String(req.headers['x-collector-key'] || '');

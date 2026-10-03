@@ -163,8 +163,90 @@ async function runLiveQuery(query) {
     __liveBusy = false;
   }
 }
+/* Починка фото без пересбора: группируем хранимые URL по vol, для каждого
+   тома находим живой хост пробами (статус + первый чанк, тело не качаем)
+   и переписываем img в хранилище через обычный push (merge по id). */
+async function probePhoto(url) {
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 8000);
+    const r = await fetch(url, { signal: ctrl.signal });
+    if (!r.ok) { clearTimeout(t); return false; }
+    const ct = r.headers.get('content-type') || '';
+    if (!ct.includes('image')) { clearTimeout(t); try { await r.arrayBuffer(); } catch (e) {} return false; }
+    const reader = r.body.getReader();
+    const { value } = await reader.read();
+    try { reader.cancel(); } catch (e) {}
+    clearTimeout(t);
+    return value && value.byteLength > 1000;
+  } catch (e) { return false; }
+}
+async function healPhotos() {
+  const st0 = await chrome.storage.local.get('running');
+  if (st0.running) { await log('Уже идёт сбор — дождись конца'); return; }
+  const cfg = await chrome.storage.local.get(['backend', 'key']);
+  const backend = (cfg.backend || '').replace(/\/$/, '');
+  const key = cfg.key || '';
+  if (!backend || !key) { await log('Нет backend/key — впиши в попапе'); return; }
+  await chrome.storage.local.set({ running: true });
+  await log('Чиню фото: забираю список…');
+  let items = [];
+  try {
+    const r = await fetch(backend + '/api/collector/status?dump=1');
+    const j = await r.json();
+    items = (((j && j.data) || {}).dump || []).filter((p) => p && p.id && p.img);
+  } catch (e) { await log('dump ERR ' + e.message); await chrome.storage.local.set({ running: false }); return; }
+  const groups = new Map();
+  const parseImg = (img) => {
+    const m = String(img).match(/basket-(\d+)\.(wb\.ru|wbbasket\.ru)\/vol(\d+)\/part(\d+)\/(\d+)\/(photos|images)\/(big|tm)\/(\d+)\.webp/);
+    if (!m) return null;
+    return { host: m[1], vol: m[3], part: m[4], nmId: m[5] };
+  };
+  items.forEach((p) => {
+    const q = parseImg(p.img);
+    if (!q) return;
+    if (!groups.has(q.vol)) groups.set(q.vol, { host: q.host, sample: p, sampleQ: q, list: [] });
+    groups.get(q.vol).list.push({ p, q });
+  });
+  await log('Товаров: ' + items.length + ', томов: ' + groups.size);
+  const fixed = [];
+  for (const [vol, g] of groups) {
+    const cand = [];
+    cand.push([g.host, 'wbbasket.ru', 'images'], [g.host, 'wb.ru', 'photos']);
+    for (let h = 1; h <= 33; h++) {
+      const hh = String(h).padStart(2, '0');
+      if (hh !== g.host) cand.push([hh, 'wbbasket.ru', 'images']);
+    }
+    let win = null;
+    for (const [hh, dom, path] of cand) {
+      const u = `https://basket-${hh}.${dom}/vol${vol}/part${g.sampleQ.part}/${g.sampleQ.nmId}/${path}/big/1.webp`;
+      if (await probePhoto(u)) { win = { host: hh, dom, path }; break; }
+      await chrome.storage.local.set({}); // держим воркер живым
+    }
+    if (win) {
+      g.list.forEach(({ p, q }) => {
+        fixed.push({ id: p.id, title: p.title, price: p.price, img: `https://basket-${win.host}.${win.dom}/vol${vol}/part${q.part}/${q.nmId}/${win.path}/big/1.webp` });
+      });
+      await log(`vol${vol}: хост ${win.host} (${g.list.length} шт)`);
+    } else {
+      await log(`vol${vol}: не нашёлся — пропускаю`);
+    }
+  }
+  if (fixed.length) {
+    try {
+      const r = await fetch(backend + '/api/collector/push', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-collector-key': key },
+        body: JSON.stringify({ items: fixed })
+      });
+      await log('push -> HTTP ' + r.status + ', чинено ' + fixed.length);
+    } catch (e) { await log('push ERR ' + e.message); }
+  }
+  await chrome.storage.local.set({ running: false, lastRun: Date.now(), lastCount: fixed.length });
+}
 chrome.runtime.onMessage.addListener((m, sender, sendResponse) => {
   if (m && m.type === 'collect') { runCollect(); return; }
+  if (m && m.type === 'heal') { healPhotos(); return; }
   if (m && m.type === 'liveQuery') {
     runLiveQuery(m.query || '').then(sendResponse);
     return true;
