@@ -13,6 +13,9 @@ const R = require('./lib/recommend');
 const O = require('./lib/orchestrator');
 const M = require('./lib/market');
 const A = require('./lib/auth');
+const T = require('./lib/taste');
+const CX = require('./lib/context');
+const EV = require('./lib/events');
 
 const ROOT = path.join(__dirname, '..');
 const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.json': 'application/json; charset=utf-8' };
@@ -117,7 +120,8 @@ async function route(req, res) {
     const U = uid ? UD(uid) : null;
     /* --- profile --- */
     if (m === 'GET' && p === '/api/profile') return send(res, 200, { ok: true, profile: profile(U), vision: U.vision || null });
-    if (m === 'PUT' && p === '/api/profile') {
+    /* Frontend исторически шлёт POST — принимаем оба метода, контракт не рвём. */
+    if ((m === 'PUT' || m === 'POST') && p === '/api/profile') {
       const b = await readBody(req);
       const v = b.profile || {};
       const clean = {
@@ -131,11 +135,22 @@ async function route(req, res) {
         budget: Math.max(500, Math.min(500000, parseInt(v.budget) || 5000)),
         colors: Array.isArray(v.colors) ? v.colors.filter((c) => R.COLOR_RU[c]).slice(0, 8) : []
       };
+      /* Расширенные мерки (§5): числа пользователя, AI их не перезаписывает. */
+      const numOrNull = (x, lo, hi) => {
+        if (x === null || x === undefined || x === '') return null;
+        const n = Number(x);
+        return Number.isFinite(n) && n >= lo && n <= hi ? Math.round(n) : null;
+      };
+      const mz = v.measures || v.measurements || {};
+      U.measures = {
+        chest: numOrNull(mz.chest, 60, 200), waist: numOrNull(mz.waist, 50, 200),
+        hips: numOrNull(mz.hips, 60, 200), shoulder: numOrNull(mz.shoulder, 25, 80)
+      };
       U.profile = clean; save(); logHistory('profile', 'Профиль обновлён', uid);
-      return send(res, 200, { ok: true, profile: clean });
+      return send(res, 200, { ok: true, profile: clean, measures: U.measures });
     }
     if (m === 'DELETE' && p === '/api/profile') {
-      const fresh = { profile: null, vision: null, favorites: [], outfits: [], wardrobe: [], feedback: { likes: {}, dislikes: {}, styleW: {}, colorW: {} }, history: [], chats: {} };
+      const fresh = { profile: null, vision: null, favorites: [], outfits: [], wardrobe: [], feedback: { likes: {}, dislikes: {}, styleW: {}, colorW: {} }, history: [], chats: {}, taste: null, events: [], searches: [], recs: [], measures: { chest: null, waist: null, hips: null, shoulder: null }, session: {} };
       Object.keys(fresh).forEach((k) => { U[k] = fresh[k]; });
       save(); return send(res, 200, { ok: true });
     }
@@ -150,19 +165,31 @@ async function route(req, res) {
     if (m === 'POST' && (p === '/api/search' || p === '/api/recommendations')) {
       const b = await readBody(req);
       const struct = b.struct || R.nlParse(b.query || '');
-      const pipe = await O.searchPipeline({ struct, text: b.query || '', profile: profile(U), feedback: feedback(U), limit: b.limit || 20, wardrobe: U.wardrobe });
+      EV.ensureUser(U);
+      const intent = b.intent || CX.baseIntent(b.query || '', U);
+      const pipe = await O.searchPipeline({
+        struct, text: (intent.queries && intent.queries.normal) || b.query || '',
+        profile: profile(U), feedback: feedback(U), limit: b.limit || 20, wardrobe: U.wardrobe,
+        intent, taste: U.taste, favorites: U.favorites
+      });
+      await EV.logEvent(U, 'search', null, { query: b.query || '', intent: intent.message });
+      EV.logRec(U, b.query || '', pipe.items.map((x) => x.id));
+      save();
       const key = JSON.stringify(struct);
       require('./lib/store').setCache('recs', key, { items: pipe.items.map((x) => x.id), ts: Date.now() });
-      return send(res, 200, { ok: true, total: pipe.total, items: pipe.items, source: pipe.source });
+      return send(res, 200, { ok: true, total: pipe.total, items: pipe.items, source: pipe.source, intent: intent.message, relaxed: pipe.relaxed });
     }
     /* --- outfits --- */
     if (m === 'POST' && p === '/api/outfits') {
       const b = await readBody(req);
-      const pipe = await O.searchPipeline({ struct: {}, profile: profile(U), feedback: feedback(U), limit: 24, wardrobe: U.wardrobe });
+      EV.ensureUser(U);
+      const pipe = await O.searchPipeline({ struct: {}, profile: profile(U), feedback: feedback(U), limit: 24, wardrobe: U.wardrobe, taste: U.taste, favorites: U.favorites });
       const outs = R.buildOutfits(pipe.items, profile(U), b.count || 3).map((o) => Object.assign({}, o, {
         items: o.items.map((id) => pipe.items.find((x) => x.id === id)).filter(Boolean),
         why: ['соответствует твоему стилю', 'подходит по цветам', 'подходит по параметрам', 'соответствует сезону', 'укладывается в бюджет']
       }));
+      EV.logRec(U, 'outfits', outs.flatMap((o) => o.items.map((x) => x.id || x)));
+      save();
       return send(res, 200, { ok: true, outfits: outs });
     }
     /* --- products --- */
@@ -182,12 +209,18 @@ async function route(req, res) {
         return send(res, 200, { ok: true, data: Object.assign({ productId: pm[1] }, av) });
       }
       if (!prod) return send(res, 404, { ok: false, error: 'Товар не найден' });
+      EV.ensureUser(U);
       if (pm[2] === '/reviews') {
+        await EV.logEvent(U, 'open_reviews', pm[1], {}); save();
         if (String(pm[1]).startsWith('ds')) return send(res, 200, { ok: true, data: { productId: pm[1], source: 'dataset', rating: prod.rating, count: prod.reviews, reviews: [], note: 'Тексты отзывов в открытом датасете отсутствуют — смотри рейтинг и число оценок, детали на странице WB.' } });
         return send(res, 200, { ok: true, data: C.getReviews(pm[1]) });
       }
-      if (pm[2] === '/analysis') return send(res, 200, { ok: true, data: await O.productAnalysis(pm[1]) });
-      const r = R.scoreProduct(prod, O.scoreCtx(profile(U), feedback(U), { wardrobe: U.wardrobe }));
+      if (pm[2] === '/analysis') {
+        await EV.logEvent(U, 'open_composition', pm[1], {}); save();
+        return send(res, 200, { ok: true, data: await O.productAnalysis(pm[1]) });
+      }
+      await EV.logEvent(U, 'open', pm[1], {}); save();
+      const r = R.scoreProduct(prod, O.scoreCtx(profile(U), feedback(U), { wardrobe: U.wardrobe, taste: U.taste, favorites: U.favorites }));
       return send(res, 200, { ok: true, product: Object.assign({}, prod, { aiScore: r.score, aiParts: r.parts, url: C.mpSearchUrl(prod) }) });
     }
     if (m === 'POST' && p === '/api/product-analysis') {
@@ -209,21 +242,30 @@ async function route(req, res) {
       const b = await readBody(req);
       const { productId, kind, reason } = b;
       const FB = feedback(U);
+      EV.ensureUser(U);
       if (kind === 'like') {
         FB.likes[productId] = true; delete FB.dislikes[productId];
         const pr = C.DemoProductProvider.getById(productId);
         if (pr) { pr.styles.forEach((s) => { FB.styleW[s] = (FB.styleW[s] || 0) + 0.05; }); pr.colors.forEach((c) => { FB.colorW[c] = (FB.colorW[c] || 0) + 0.05; }); }
+        await EV.logEvent(U, 'like', productId, { why: reason || '' });
       } else {
         FB.dislikes[productId] = reason || 'dislike'; delete FB.likes[productId];
+        await EV.logEvent(U, 'dislike', productId, { why: reason || '' });
       }
       U.feedback = FB;
       save(); logHistory('feedback', `${kind}: ${productId}`, uid);
-      return send(res, 200, { ok: true });
+      return send(res, 200, { ok: true, tasteLevel: T.level(U.taste) });
     }
     if (m === 'GET' && p === '/api/favorites') return send(res, 200, { ok: true, favorites: U.favorites });    if (m === 'POST' && p === '/api/favorites') {
       const b = await readBody(req);
-      if (b.action === 'remove') U.favorites = U.favorites.filter((x) => x !== b.productId);
-      else if (b.productId && !U.favorites.includes(b.productId)) U.favorites.push(b.productId);
+      EV.ensureUser(U);
+      if (b.action === 'remove') {
+        U.favorites = U.favorites.filter((x) => x !== b.productId);
+        await EV.logEvent(U, 'reject', b.productId, { why: 'unfav' });
+      } else if (b.productId && !U.favorites.includes(b.productId)) {
+        U.favorites.push(b.productId);
+        await EV.logEvent(U, 'fav', b.productId, {});
+      }
       save(); return send(res, 200, { ok: true, favorites: U.favorites });
     }
     if (m === 'GET' && p === '/api/history') return send(res, 200, { ok: true, history: U.history.slice(0, 50) });
@@ -247,7 +289,7 @@ async function route(req, res) {
       const b = await readBody(req);
       const items = Array.isArray(b.items) ? b.items.slice(0, 100) : [];
       const struct = b.struct || {};
-      const scored = M.scoreLive(items, O.scoreCtx(profile(U), feedback(U), { occasion: struct.occasion, wardrobe: U.wardrobe }));
+      const scored = M.scoreLive(items, O.scoreCtx(profile(U), feedback(U), { occasion: struct.occasion, wardrobe: U.wardrobe, taste: U.taste, favorites: U.favorites }));
       return send(res, 200, { ok: true, items: scored });
     }
     /* --- collector: домашний мост каталога. Авторизация — секретом
@@ -318,7 +360,7 @@ async function route(req, res) {
         const job = liveQ.get(b.qid);
         if (!job) return send(res, 404, { ok: false, error: 'Заказ не найден' });
         const U = UD(job.uid);
-        const scored = M.scoreLive((b.items || []).slice(0, 30), O.scoreCtx(profile(U), feedback(U), { wardrobe: U.wardrobe })).slice(0, 12);
+        const scored = M.scoreLive((b.items || []).slice(0, 30), O.scoreCtx(profile(U), feedback(U), { wardrobe: U.wardrobe, taste: U.taste, favorites: U.favorites })).slice(0, 12);
         liveQ.set(b.qid, Object.assign({}, job, { status: 'done', items: scored, ts: Date.now() }));
         return send(res, 200, { ok: true, data: { delivered: scored.length } });
       }
@@ -358,13 +400,64 @@ async function route(req, res) {
         addedAt: Date.now()
       };
       U.wardrobe.unshift(item);
+      EV.ensureUser(U);
+      await EV.logEvent(U, 'add_wardrobe', item.id, { why: title });
       save(); logHistory('wardrobe', 'В гардероб: ' + title, uid);
       return send(res, 200, { ok: true, item, insights: R.wardrobeInsights(U.wardrobe) });
     }
     if (m === 'DELETE' && p === '/api/wardrobe') {
       const b = await readBody(req);
       U.wardrobe = (U.wardrobe || []).filter((x) => x.id !== b.id);
+      EV.ensureUser(U);
+      await EV.logEvent(U, 'remove_wardrobe', b.id, {});
       save(); return send(res, 200, { ok: true, insights: R.wardrobeInsights(U.wardrobe) });
+    }
+    /* --- персональный стилист: события, контекст, вкус, интент --- */
+    if (m === 'POST' && p === '/api/user/event') {
+      const b = await readBody(req);
+      const allowed = ['like', 'dislike', 'save', 'fav', 'purchase', 'add_wardrobe', 'remove_wardrobe', 'reject', 'open', 'longview', 'open_reviews', 'open_composition', 'search', 'explicit'];
+      if (!allowed.includes(b.type)) return send(res, 400, { ok: false, error: 'Неизвестный тип события' });
+      if (b.type === 'explicit' && (!b.dim || !b.key)) return send(res, 400, { ok: false, error: 'Нужно dim и key' });
+      EV.ensureUser(U);
+      const r = await EV.logEvent(U, b.type, b.productId || null, { why: b.why || '', query: b.query || '', dim: b.dim, key: b.key, like: b.like, intent: b.intent || '' });
+      save();
+      return send(res, 200, { ok: true, signals: r.sigCount, tasteLevel: T.level(U.taste) });
+    }
+    if (m === 'GET' && p === '/api/user/context') {
+      EV.ensureUser(U);
+      return send(res, 200, { ok: true, data: CX.buildUserContext(U, {}) });
+    }
+    if (m === 'GET' && p === '/api/user/taste-profile') {
+      EV.ensureUser(U);
+      const t = U.taste || T.blankTaste();
+      return send(res, 200, {
+        ok: true, data: {
+          style: T.topOf(t, 'style', 6, 0), colors: T.topOf(t, 'colors', 6, 0),
+          fits: T.topOf(t, 'fits', 4, 0), patterns: T.topOf(t, 'patterns', 4, 0),
+          quality: t.quality, priceSens: t.priceSens, brandImp: t.brandImp, novelty: t.novelty,
+          level: T.level(t), summary: T.summarize(t, U.profile), changes: (t.changes || []).slice(0, 20)
+        }
+      });
+    }
+    if (m === 'POST' && p === '/api/ai/search-intent') {
+      const b = await readBody(req);
+      EV.ensureUser(U);
+      const intent = CX.baseIntent(String(b.message || ''), U);
+      return send(res, 200, { ok: true, data: intent });
+    }
+    if (m === 'POST' && p === '/api/taste/recalculate') {
+      EV.ensureUser(U);
+      if (!U.taste) U.taste = T.blankTaste();
+      U.taste.summary = { text: T.summarize(U.taste, U.profile), ts: Date.now(), level: T.level(U.taste) };
+      save();
+      return send(res, 200, { ok: true, data: U.taste.summary });
+    }
+    if (m === 'POST' && p === '/api/user/wardrobe/analyze') {
+      const b = await readBody(req);
+      if (typeof b.image !== 'string' || !b.image.startsWith('data:image/') || b.image.length > 1200000)
+        return send(res, 400, { ok: false, code: 'BAD_IMAGE', error: 'Нужно фото (dataURL) до ~1 МБ' });
+      const out = await O.describeItem(b.image);
+      return send(res, 200, { ok: true, data: out });
     }
     return send(res, 404, { ok: false, error: 'Не найдено' });
   } catch (e) {

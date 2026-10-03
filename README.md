@@ -153,15 +153,30 @@ Stylist — Qwen3-32B-совместимая (`qwen3-32b`); Product — лёгк
 
 ```text
 Frontend → /api/* → AIOrchestrator → Vision | Stylist | Product (Qwen)
-                          ↓
-              Recommendation Engine (8 факторов, код, а не AI)
-  style .25 · color .15 · body .15 · size .15 · budget .10 · pref .10 · quality .05 · season .05
+                           ↓
+            UserContext + SearchIntent (hard/soft, relaxation)
+                           ↓
+               Recommendation Engine (код, а не AI)
+   style .25 · color .15 · body .15 · size .15 · budget .10 · pref .10
+   quality .05 · season .05 · wardrobe .06 + redundancy-штраф
+   вкусовые векторы подмешиваются в веса; веса — из SCORE_WEIGHTS
 ```
 
 Cost control: 500 товаров → код-фильтры → кешированные анализы → скоринг →
 топ-20 → Main AI только для финала/диалога. Фото анализируется один раз и
 кешируется по хешу. Код считает: фильтры, сортировку, дедуп, score, историю,
 кеш, пагинацию.
+
+## Персональный стилист (taste + intent + обучение)
+
+Запрос «футболка» превращается в SearchIntent: hard (категория/пол/размер/
+бюджет) + soft (цвета/стили/посадки из вкуса) + 3 уровня запроса. Вкус —
+векторы style/colors/fits/patterns со value/confidence/evidence, учатся
+детерминированно на событиях (like/dislike/save/open/wardrobe/purchase),
+явное важнее выведенного. Движок добавляет wardrobe-совместимость и
+redundancy-штраф. Сводки для AI — только топы и саммари, не вся история.
+События снимаются сервером с существующих роутов — frontend не менялся.
+Тесты: `node backend/test/run.js` (24 проверки).
 
 ## Как заменить AI provider
 
@@ -188,4 +203,7 @@ Self-hosted Qwen с OpenAI-совместимым сервером (vLLM/TGI): �
 `POST /api/product-analysis|/api/products/explanation` · `POST /api/ai/chat` ·
 `POST /api/feedback` · `GET/POST /api/favorites` · `GET /api/history` ·
 `GET/POST/DELETE /api/wardrobe` · `GET /api/market/wb/search|/api/market/ozon/search` ·
-`POST /api/market/score` · `GET /api/market/link`
+`POST /api/market/score` · `GET /api/market/link` ·
+`POST /api/user/event` · `GET /api/user/context|/api/user/taste-profile` ·
+`POST /api/ai/search-intent` · `POST /api/taste/recalculate` ·
+`POST /api/user/wardrobe/analyze`

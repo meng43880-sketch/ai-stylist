@@ -44,7 +44,8 @@ function qwenProvider(name, ofoxModel, dashBase, dashModel) {
   return { key: '', base: dashBase.replace(/\/$/, ''), model: dashModel };
 }
 function weights() {
-  const d = { style: 0.25, color: 0.15, body: 0.15, size: 0.15, budget: 0.10, pref: 0.10, quality: 0.05, season: 0.05 };
+  /* wardrobe — совместимость с гардеробом (§23); redundancy идёт штрафом (§24). */
+  const d = { style: 0.25, color: 0.15, body: 0.15, size: 0.15, budget: 0.10, pref: 0.10, quality: 0.05, season: 0.05, wardrobe: 0.06 };
   try {
     const o = JSON.parse(process.env.SCORE_WEIGHTS || '{}');
     const w = Object.assign({}, d, o);

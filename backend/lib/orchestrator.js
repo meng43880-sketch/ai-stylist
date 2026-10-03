@@ -9,6 +9,9 @@ const Q = require('./qwen');
 const C = require('./catalog');
 const R = require('./recommend');
 const M = require('./market');
+const T = require('./taste');
+const CX = require('./context');
+const EV = require('./events');
 
 const sha = (s) => crypto.createHash('sha256').update(String(s)).digest('hex').slice(0, 32);
 
@@ -17,7 +20,7 @@ const sha = (s) => crypto.createHash('sha256').update(String(s)).digest('hex').s
    Ответы пользователю всё равно по-русски (требуем в промпте). */
 const VISION_SYSTEM = `You are a Vision AI for a personal stylist. Analyze the user photo.
 Return STRICT JSON: {appearance:{hair_color,eye_color,skin_tone,face_shape}, visual_proportions:{shoulder_width,body_build,silhouette,height_impression}, style_signals:[max 3 short phrases in Russian], recommended_colors:[], avoid_colors:[], recommended_fits:[], avoid_fits:[], recommended_styles:[], confidence:{appearance,proportions,style,colors}}.
-Forbidden: medical inferences, health, exact clothing size, categorical claims. Colors from [black,white,olive,beige,gray,green,blue,brown]. Styles from [casual,smart,street,minimal,sport,oldmoney,business,classic,tech,oversize,party].`;
+Forbidden: medical inferences, health, exact clothing size, categorical claims. Only visually observable traits; anything uncertain goes to null with confidence below 0.5, never a guess. Colors from [black,white,olive,beige,gray,green,blue,brown]. Styles from [casual,smart,street,minimal,sport,oldmoney,business,classic,tech,oversize,party].`;
 function demoVision(profile) {
   const styles = (profile.styles && profile.styles.length ? profile.styles : ['casual', 'minimal']).slice();
   const base = {};
@@ -43,6 +46,7 @@ async function analyzePhoto({ image, profile }) {
     setCache('vision', key, d);
     return Object.assign({ cached: false }, d);
   }
+  const tV = Date.now();
   const obj = await Q.chatJSON(CFG.qwen.vision, {
     system: VISION_SYSTEM,
     user: 'Analyze the photo. Profile: height ' + profile.height + 'cm, weight ' + profile.weight + 'kg, build ' + profile.build + '. JSON only.',
@@ -53,7 +57,7 @@ async function analyzePhoto({ image, profile }) {
   const norm = normalizeVision(obj);
   const out = Object.assign({ source: 'qwen-vision', model: CFG.qwen.vision.model }, norm);
   setCache('vision', key, out);
-  logHistory('ai', 'Vision-профиль создан (Qwen)');
+  logHistory('ai', `vision ${CFG.qwen.vision.model} ${Date.now() - tV}ms`);
   return Object.assign({ cached: false }, out);
 }
 
@@ -98,7 +102,9 @@ function normalizeStylist(o) {
   o = (o && typeof o === 'object') ? o : {};
   return {
     intent: typeof o.intent === 'string' && o.intent ? o.intent : 'find_products',
+    intentObj: (o.intent && typeof o.intent === 'object') ? o.intent : null,
     message: pickStr(o, ['message', 'response', 'text', 'answer', 'reply']),
+    suggestQuery: pickStr(o, ['suggestQuery', 'suggest_query', 'query']),
     searchCriteria: (o.searchCriteria && typeof o.searchCriteria === 'object') ? o.searchCriteria : {}
   };
 }
@@ -106,6 +112,7 @@ function normalizeProduct(o, item) {
   o = (o && typeof o === 'object') ? o : {};
   const qs = o.quality_signals || o.quality || {};
   const num = (v, d) => Number.isFinite(+v) ? +v : d;
+  const rs = o.review_signals || {};
   return {
     category: o.category || o.cat || item.cat,
     subcategory: o.subcategory || '',
@@ -116,12 +123,22 @@ function normalizeProduct(o, item) {
     quality_signals: { material: num(qs.material, 70), construction: num(qs.construction, 70), reviews: num(qs.reviews, 70) },
     value_for_money: num(o.value_for_money != null ? o.value_for_money : o.value, 70),
     review_summary: { positive: ((o.review_summary || {}).positive || o.positive || []).slice(0, 3), negative: ((o.review_summary || {}).negative || o.negative || []).slice(0, 2) },
+    /* Review signals (§21): только подтверждённое; нет данных — null, не выдумка. */
+    review_signals: Object.keys(rs).length ? rs : null,
+    material: typeof o.material === 'string' && o.material ? o.material.slice(0, 120) : null,
+    strengths: Array.isArray(o.strengths) ? o.strengths.map(String).slice(0, 4) : [],
+    weaknesses: Array.isArray(o.weaknesses) ? o.weaknesses.map(String).slice(0, 3) : [],
+    sizing_note: typeof o.sizing_note === 'string' ? o.sizing_note.slice(0, 120) : null,
     confidence: num(o.confidence, 0.5)
   };
 }
 function normalizeVision(o) {
   o = (o && typeof o === 'object') ? o : {};
   const arr = (v) => Array.isArray(v) ? v : [];
+  const conf = (o.confidence && typeof o.confidence === 'object') ? o.confidence : {};
+  ['appearance', 'proportions', 'style', 'colors'].forEach((k) => {
+    if (!Number.isFinite(+conf[k])) conf[k] = null; // неизвестно — null, не выдумка (§2)
+  });
   return {
     appearance: o.appearance || {},
     visual_proportions: o.visual_proportions || o.proportions || {},
@@ -131,7 +148,11 @@ function normalizeVision(o) {
     recommended_fits: arr(o.recommended_fits || o.fits),
     avoid_fits: arr(o.avoid_fits),
     recommended_styles: arr(o.recommended_styles || o.styles),
-    confidence: o.confidence || {}
+    visual_preferences: {
+      likely_suitable_colors: arr(o.recommended_colors || o.colors).slice(0, 3),
+      likely_suitable_fits: arr(o.recommended_fits || o.fits).slice(0, 2)
+    },
+    confidence: conf
   };
 }
 /* ---------- PRODUCT AI over newcomers ---------- */
@@ -152,14 +173,16 @@ async function analyzeLiveItem(item) {
     setCache('analyses', item.id, d);
     return d;
   }
+  const tP = Date.now();
   const obj = await Q.chatJSON(CFG.qwen.product, {
-    system: 'You are a Product AI. Return STRICT JSON: {category,subcategory,color,fit,style[],season[],quality_signals:{material,construction,reviews},value_for_money,review_summary:{positive[],negative[]},confidence}. No inventing: no data means confidence below 0.5 and empty lists.',
+    system: 'You are a Product AI. Return STRICT JSON: {category,subcategory,color,fit,style[],season[],quality_signals:{material,construction,reviews},value_for_money,review_summary:{positive[],negative[]},review_signals:{sizing:{runs_small:0..1},material:{positive:0..1},quality:{positive:0..1},defects:[]} (omit review_signals if no review data),material:string|null,season[],strengths[],weaknesses[],sizing_note:string|null,confidence}. No inventing: no data means null/empty and confidence below 0.5.',
     user: `Title: ${item.title}\nBrand: ${item.brand || ''}\nPrice: ${item.price} RUB\nRating: ${item.rating || 'none'}, ratings: ${item.reviews || 0}\nColors: ${(item.colors || []).join(',')}\nSizes: ${(item.sizes || []).join(',')}`,
     required: [],
     tag: 'product', maxTokens: 500
   });
   const out = Object.assign({ productId: item.id, source: 'qwen-product' }, normalizeProduct(obj, item));
   setCache('analyses', item.id, out);
+  logHistory('ai', `product ${CFG.qwen.product.model} ${Date.now() - tP}ms ${item.id}`);
   return out;
 }
 /* Новинки топа без кеша → AI#3 (макс. 8 за поиск, остальным — кеш/сигналы). */
@@ -180,43 +203,93 @@ function activeCatalog(struct) {
   return C.DemoProductProvider.search(struct || {});
 }
 function scoreCtx(profile, feedback, extra) {
+  const fb = Object.assign({ likes: {}, dislikes: {}, styleW: {}, colorW: {} }, feedback || {});
+  const ex = extra || {};
+  /* Taste-векторы подмешиваем в веса кода (§25): топ-предпочтения дают
+     мягкий бонус поверх явного профиля, негативы — штраф. */
+  if (ex.taste) {
+    const fold = (dim, holder) => {
+      T.topOf(ex.taste, dim, 4, 0.35).forEach((x) => {
+        holder[x.key] = (holder[x.key] || 0) + Math.round((x.value - 0.5) * 12 * x.conf * 10) / 10;
+      });
+    };
+    fb.styleW = Object.assign({}, fb.styleW); fb.colorW = Object.assign({}, fb.colorW);
+    fold('style', fb.styleW); fold('colors', fb.colorW);
+  }
   return Object.assign({
-    profile, feedback: feedback || { likes: {}, dislikes: {}, styleW: {}, colorW: {} },
-    season: R.currentSeason(), occasion: '', analyses: {}, wardrobe: []
-  }, extra || {});
+    profile, feedback: fb,
+    season: R.currentSeason(), occasion: '', analyses: {}, wardrobe: [],
+    favorites: [], taste: ex.taste || null
+  }, ex);
 }
 /* ---------- SEARCH PIPELINE (cost control) ----------
    Воронка: веер запросов × страницы (до ~180 кандидатов) → код-фильтры →
    скоринг → топ-30 → AI#3 только по новичкам без кеша (макс. 8) → топ-20.
    AI никогда не видит сотни товаров. */
-async function searchPipeline({ struct, text, profile, feedback, limit, wardrobe }) {
+/* struct из SearchIntent: hard — в фильтры, soft — в скоринг/релаксацию. */
+function structFromIntent(intent, fallback) {
+  if (!intent || !intent.hard) return fallback || {};
+  const h = intent.hard, s = intent.soft || {};
+  return {
+    category: h.category || '', subcategory: h.subcategory || '',
+    color: (s.colors || [])[0] || '', maxPrice: h.maxPrice || null,
+    style: (s.styles || [])[0] || '', occasion: s.occasion || '',
+    size: h.size || ''
+  };
+}
+async function searchPipeline({ struct, text, profile, feedback, limit, wardrobe, intent, taste, favorites }) {
+  struct = (intent ? structFromIntent(intent, struct) : struct) || {};
+  const baseCtx = { occasion: struct && struct.occasion, wardrobe: wardrobe || [], taste: taste || null, favorites: favorites || [] };
   // Демо-каталог выключен по умолчанию: только живьё + пустота, без выдумок.
   let list = CFG.demoCatalog ? activeCatalog(struct) : [];
   let total = list.length;
   list = list.slice(0, 500);
-  const top = R.rankProducts(list, scoreCtx(profile, feedback, { occasion: struct && struct.occasion, wardrobe: wardrobe || [] }));
+  const top = R.rankProducts(list, scoreCtx(profile, feedback, baseCtx));
   let cands = top.slice(0, limit || 20);
   // Обогащаем топ кешированными демо-анализами (без AI-вызовов в демо-режиме)
   const analyses = {};
   cands.forEach((p) => { const d = C.DemoProductProvider.getById(p.id); if (d) analyses[p.id] = C.demoAnalysis(d); });
-  // Открытые датасеты: реальные товары WB, работают без сети маркетплейсов.
+  const relaxed = [];
+  // Открытые датасеты + smart relaxation (§18): строго → ослабляем soft по ступеням.
   try {
     const D = require('./datasets');
     const rows = await D.ensureLoaded();
     if (rows.length) {
-      const ds = D.searchRows(rows, {
+      const mergeDs = (ds) => {
+        if (!ds.items.length) return;
+        const dsCtx = scoreCtx(profile, feedback, baseCtx);
+        const dsRanked = R.rankProducts(ds.items, dsCtx);
+        const seen = new Set(cands.map((x) => x.id));
+        dsRanked.forEach((p) => { if (!seen.has(p.id)) { seen.add(p.id); cands.push(p); } });
+        cands.sort((a, b) => b.aiScore - a.aiScore);
+        cands = cands.slice(0, limit || 20);
+        total += ds.total;
+      };
+      mergeDs(D.searchRows(rows, {
         query: text || '', category: struct.category || '', subcategory: struct.subcategory || '',
         maxPrice: struct.maxPrice || null,
         colors: struct.color ? [struct.color] : [],
         limit: 60
-      });
-      const dsCtx = scoreCtx(profile, feedback, { occasion: struct && struct.occasion, wardrobe: wardrobe || [] });
-      const dsRanked = R.rankProducts(ds.items, dsCtx);
-      const seen = new Set(cands.map((x) => x.id));
-      dsRanked.forEach((p) => { if (!seen.has(p.id)) { seen.add(p.id); cands.push(p); } });
-      cands.sort((a, b) => b.aiScore - a.aiScore);
-      cands = cands.slice(0, limit || 20);
-      total += ds.total;
+      }));
+      /* Smart relaxation (§18): мало — ослабляем soft ступенями (макс. 3
+         добора, бюджет — только если интент позволяет). */
+      if (intent && cands.length < 8) {
+        const allowBudget = intent.allowBudgetRelax === true;
+        for (const stp of CX.relaxSteps()) {
+          if (cands.length >= 8) break;
+          if (stp.key === 'budget' && !allowBudget) continue;
+          const cur = CX.applyRelax(intent, relaxed.concat([stp.key]));
+          const rst = structFromIntent({ hard: cur.hard, soft: cur.soft });
+          const ds = D.searchRows(rows, {
+            query: '', category: rst.category || '', subcategory: rst.subcategory || '',
+            maxPrice: rst.maxPrice || null,
+            colors: rst.color ? [rst.color] : [],
+            limit: 60
+          });
+          if (ds.items.length) { relaxed.push(stp.key); mergeDs(ds); }
+          if (relaxed.length >= 3) break;
+        }
+      }
     }
   } catch (e) { /* датасет недоступен — идём дальше без него */ }
   /* Takprodam ВРЕМЕННО выведен из выдачи (флаг). Вернуть: TAKPRODAM_ENABLED=true.
@@ -229,7 +302,7 @@ async function searchPipeline({ struct, text, profile, feedback, limit, wardrobe
       maxPrice: struct.maxPrice || undefined, limit: 60, pages: 1, perPage: 60
     });
     if (tp.items.length) {
-      const tpCtx = scoreCtx(profile, feedback, { occasion: struct && struct.occasion, wardrobe: wardrobe || [] });
+      const tpCtx = scoreCtx(profile, feedback, { occasion: struct && struct.occasion, wardrobe: wardrobe || [], taste: taste || null, favorites: favorites || [] });
       const tpRanked = R.rankProducts(tp.items, tpCtx);
       const seen3 = new Set(cands.map((x) => x.id));
       tpRanked.forEach((x) => { if (!seen3.has(x.id)) { seen3.add(x.id); cands.push(x); } });
@@ -248,7 +321,7 @@ async function searchPipeline({ struct, text, profile, feedback, limit, wardrobe
     const HF = require('./homefeed');
     const rows = HF.getItems();
     if (rows.length) {
-      const hfCtx = scoreCtx(profile, feedback, { occasion: struct && struct.occasion, wardrobe: wardrobe || [] });
+      const hfCtx = scoreCtx(profile, feedback, { occasion: struct && struct.occasion, wardrobe: wardrobe || [], taste: taste || null, favorites: favorites || [] });
       const hfRanked = R.rankProducts(rows, hfCtx);
       const seen2 = new Set(cands.map((x) => x.id));
       hfRanked.forEach((x) => { if (!seen2.has(x.id)) { seen2.add(x.id); cands.push(x); } });
@@ -269,7 +342,7 @@ async function searchPipeline({ struct, text, profile, feedback, limit, wardrobe
       const wait = (ms) => new Promise((res) => setTimeout(() => res([]), ms));
       const live = await Promise.race([M.funnelSearch(queries, 25, 2), wait(12000)]);
       if (live.length) {
-        const ctx = scoreCtx(profile, feedback, { occasion: struct && struct.occasion, wardrobe: wardrobe || [] });
+        const ctx = scoreCtx(profile, feedback, { occasion: struct && struct.occasion, wardrobe: wardrobe || [], taste: taste || null, favorites: favorites || [] });
         const scored = M.scoreLive(live.slice(0, 150), ctx);
         const fresh = await ensureLiveAnalyses(scored);
         Object.assign(analyses, fresh);
@@ -302,7 +375,7 @@ async function searchPipeline({ struct, text, profile, feedback, limit, wardrobe
         });
       } catch (e) {}
       if (pool.length) {
-        const rctx = scoreCtx(profile, feedback, { occasion: struct && struct.occasion, wardrobe: wardrobe || [] });
+        const rctx = scoreCtx(profile, feedback, { occasion: struct && struct.occasion, wardrobe: wardrobe || [], taste: taste || null, favorites: favorites || [] });
         const ranked = R.rankProducts(pool, rctx);
         const seenR = new Set(cands.map((x) => x.id));
         ranked.forEach((x) => { if (!seenR.has(x.id)) { seenR.add(x.id); cands.push(x); } });
@@ -311,7 +384,7 @@ async function searchPipeline({ struct, text, profile, feedback, limit, wardrobe
       }
     } catch (e) {}
   }
-  return { total, items: cands, analyses, source };
+  return { total, items: cands, analyses, source, intent: intent || null, relaxed };
 }
 
 /* ---------- STYLIST CHAT ---------- */
@@ -337,18 +410,28 @@ async function describeItem(image) {
     e.code = 'NO_VISION'; e.status = 503; throw e;
   }
   const obj = await Q.chatJSON(CFG.qwen.vision, {
-    system: 'You see ONE clothing item. Return STRICT JSON: {category: top|bottom|shoes|acc, colors: [up to 2 from black,white,olive,beige,gray,green,blue,brown], styles: [up to 2 from casual,smart,street,minimal,sport,oldmoney,business,classic,tech,oversize,party], query: "short Russian marketplace search phrase, 2-4 words", summary: "1 Russian sentence describing the item"}. Only JSON.',
+    system: 'You see ONE clothing item. Return STRICT JSON: {category: top|bottom|shoes|acc, subcategory: string|null, color: string|null, colors: [up to 2, null if unknown], pattern: solid|stripe|check|geometric|floral|graphic|null, material: string|null (only if visible), fit: slim|regular|relaxed|oversize|null, length: string|null, styles: [up to 2 or []], season: [] (empty if unknown), occasion: [] (empty if unknown), details: [visible facts only], brand: string|null (only if readable), condition: string|null (only if visible), query: "short Russian marketplace search phrase, 2-4 words", summary: "1 Russian sentence", confidence: 0..1}. Never invent: unknown means null/empty, never a guess.',
     user: 'What item is in the photo? JSON only.',
     images: [image],
-    required: [], tag: 'vision', maxTokens: 300
+    required: [], tag: 'vision', maxTokens: 400
   });
   const colors = Array.isArray(obj.colors) ? obj.colors.filter((c) => R.COLOR_RU[c]).slice(0, 2) : [];
   const styles = Array.isArray(obj.styles) ? obj.styles.filter((s) => R.STYLE_RU[s]).slice(0, 2) : [];
   const cats = ['top', 'bottom', 'shoes', 'acc'];
+  const strOrNull = (v) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, 40) : null);
   const out = {
     source: 'qwen-vision', category: cats.includes(obj.category) ? obj.category : '',
+    subcategory: strOrNull(obj.subcategory), color: strOrNull(obj.color),
+    pattern: strOrNull(obj.pattern), material: strOrNull(obj.material),
+    fit: ['slim', 'regular', 'relaxed', 'oversize'].includes(obj.fit) ? obj.fit : null,
+    length: strOrNull(obj.length),
     colors, styles, query: String(obj.query || '').slice(0, 60),
-    summary: String(obj.summary || obj.description || '').slice(0, 200)
+    season: Array.isArray(obj.season) ? obj.season.slice(0, 4) : [],
+    occasion: Array.isArray(obj.occasion) ? obj.occasion.slice(0, 3) : [],
+    details: Array.isArray(obj.details) ? obj.details.map(String).slice(0, 5) : [],
+    brand: strOrNull(obj.brand), condition: strOrNull(obj.condition),
+    summary: String(obj.summary || obj.description || '').slice(0, 200),
+    confidence: Number.isFinite(+obj.confidence) ? Math.max(0, Math.min(1, +obj.confidence)) : null
   };
   setCache('vision_items', key, out);
   return Object.assign({ cached: false }, out);
@@ -379,13 +462,25 @@ async function chat({ message, conversationId, profile, feedback, uid, wardrobe,
   chats[cid] = chats[cid] || [];
   chats[cid].push({ role: 'user', text: msg, t: Date.now() });  const weather = await getWeather();
   const ctx = { weather, season: R.currentSeason(), wardrobe: wr };
+  /* Персональный слой (§55): кто пользователь → что хочет → merge → intent. */
+  const t0 = Date.now();
+  const UU = uid ? store.UD(uid) : null;
+  if (UU) EV.ensureUser(UU);
+  const uctx = UU ? CX.buildUserContext(UU, { cid }) : null;
+  const baseIntent = UU ? CX.baseIntent(msg, UU) : null;
+  if (UU) {
+    const sess = UU.session[cid] || {};
+    if (baseIntent && baseIntent.soft.occasion) sess.occasion = baseIntent.soft.occasion;
+    if (baseIntent && baseIntent.hard.maxPrice) sess.budget = baseIntent.hard.maxPrice;
+    UU.session[cid] = sess;
+  }
   let out;
   /* Фото вещи: вижен описывает → критерии → поиск похожих. */
   if (image) {
     if (typeof image !== 'string' || image.length > 1200000) throw Q.err('BAD_IMAGE', 'Фото слишком большое', 400);
     const seen = await describeItem(image);
     const crit = { category: seen.category, color: (seen.colors || [])[0] || '', style: (seen.styles || [])[0] || '', size: profile.topSize || '' };
-    const pipe = await searchPipeline({ struct: crit, text: seen.query, profile, feedback, limit: 50, wardrobe: wr });
+    const pipe = await searchPipeline({ struct: crit, text: seen.query, profile, feedback, limit: 50, wardrobe: wr, taste: UU && UU.taste, favorites: UU && UU.favorites });
     let text = seen.summary ? `Вижу: ${seen.summary} Ищу похожие.` : 'Разобрал фото, ищу похожие вещи.';
     if (Q.isConfigured(CFG.qwen.stylist)) {
       try {
@@ -401,35 +496,70 @@ async function chat({ message, conversationId, profile, feedback, uid, wardrobe,
     out = { intent: 'find_similar', searchCriteria: crit, suggestQuery: seen.query, message: text, products: pipe.items, total: pipe.total, conversationId: cid, aiMode: Q.isConfigured(CFG.qwen.stylist) ? 'production' : 'demo', seen };
   } else if (!Q.isConfigured(CFG.qwen.stylist)) {
     const d = demoBrain(msg, profile, ctx);
-    const pipe = await searchPipeline({ struct: d.searchCriteria, text: msg, profile, feedback, limit: 50, wardrobe: wr });
-    out = Object.assign({}, d, { products: pipe.items, total: pipe.total, conversationId: cid, aiMode: 'demo' });
+    const pipe = await searchPipeline({
+      struct: d.searchCriteria, text: msg, profile, feedback, limit: 50, wardrobe: wr,
+      intent: baseIntent, taste: UU && UU.taste, favorites: UU && UU.favorites
+    });
+    if (UU) {
+      await EV.logEvent(UU, 'search', null, { query: msg, intent: (pipe.intent && pipe.intent.message) || '' });
+      EV.logRec(UU, msg, pipe.items.map((x) => x.id));
+      save();
+    }
+    out = Object.assign({}, d, {
+      products: pipe.items, total: pipe.total, conversationId: cid, aiMode: 'demo',
+      searchIntent: pipe.intent, relaxed: pipe.relaxed
+    });
   } else {
-    // Production: Main AI. При недоступности — тихий откат на demoBrain (§51).
+    // Production: Main AI + UserContext + SearchIntent. При недоступности — тихий откат.
     try {
-      const wrSum = wr.map((w) => `${w.title} (${w.cat}, ${(w.colors || []).join('/')})`).slice(0, 12).join('; ');
-      const sys = `You are an AI stylist. User: height ${profile.height}cm, weight ${profile.weight}kg, sizes ${profile.topSize}/${profile.pantsSize}/${profile.shoeSize}, budget ${profile.budget} RUB, styles ${(profile.styles || []).join(',')}, colors ${(profile.colors || []).join(',')}. Season ${ctx.season}, weather ${weather.temp != null ? weather.temp + 'C' : 'n/a'}. Wardrobe: ${wrSum || 'empty'} — prefer items matching it, fill gaps. Never ask what the profile already knows. Reply in Russian, max 2 short sentences. The message field is REQUIRED, never empty.`;
+      const tAI = Date.now();
+      const sys = `You are an AI stylist. Build a DETAILED search intent from user message + user context (who they are, taste, wardrobe, session). NEVER invent facts. Hard constraints (gender/size/category/budget) are sacred; soft prefs guide ranking. Reply STRICT JSON: {intent:{hard:{category,subcategory,gender,size,maxPrice},soft:{colors[],styles[],fits[],occasion,avoid[]},allowBudgetRelax:bool},suggestQuery:"short marketplace phrase",message:"2 short Russian sentences max"}. The message field is REQUIRED, never empty.`;
       const hist = chats[cid].slice(-4).map((m) => ({ role: m.role === 'ai' ? 'assistant' : 'user', content: String(m.text).slice(0, 200) }));
-      const rawAnswer = await Q.chatJSON(CFG.qwen.stylist, { system: sys, user: msg + '\nHistory: ' + JSON.stringify(hist), required: [], tag: 'stylist', maxTokens: 350 });
+      const userMsg = msg + '\nUserContext: ' + JSON.stringify(uctx || {}).slice(0, 3500)
+        + '\nBaseIntent: ' + JSON.stringify(baseIntent || {}).slice(0, 1200)
+        + '\nHistory: ' + JSON.stringify(hist);
+      const rawAnswer = await Q.chatJSON(CFG.qwen.stylist, { system: sys, user: userMsg, required: [], tag: 'stylist', maxTokens: 500 });
       const answer = normalizeStylist(rawAnswer);
-      /* Страховка: AI иногда возвращает пустые критерии — тогда берём
-         детерминированный разбор сообщения как базу, AI — поверх. */
-      const base = R.nlParse(msg);
-      const aiCrit = answer.searchCriteria || {};
-      const crit = Object.assign({ size: profile.topSize || '' }, base);
-      ['category', 'subcategory', 'color', 'maxPrice', 'style', 'occasion'].forEach((k) => { if (aiCrit[k]) crit[k] = aiCrit[k]; });
-      const pipe = await searchPipeline({ struct: crit, text: msg, profile, feedback, limit: 50, wardrobe: wr });
+      logHistory('ai', `stylist ${CFG.qwen.stylist.model} ${Date.now() - tAI}ms cached:${answer.cached ? 1 : 0}`);
+      /* Intent: AI поверх базы; страховка — база всегда валидна. */
+      const aiIntent = answer.intentObj && answer.intentObj.hard ? answer.intentObj : null;
+      const intent = aiIntent ? {
+        hard: Object.assign({}, baseIntent ? baseIntent.hard : {}, aiIntent.hard),
+        soft: Object.assign({}, baseIntent ? baseIntent.soft : {}, aiIntent.soft),
+        queries: (aiIntent.queries) || (baseIntent ? baseIntent.queries : { exact: msg, normal: msg, semantic: msg }),
+        message: (baseIntent ? baseIntent.message : ''),
+        allowBudgetRelax: !!aiIntent.allowBudgetRelax
+      } : baseIntent;
+      const crit = structFromIntent(intent, R.nlParse(msg));
+      const pipe = await searchPipeline({
+        struct: crit, text: (answer.suggestQuery) || msg, profile, feedback, limit: 50, wardrobe: wr,
+        intent, taste: UU && UU.taste, favorites: UU && UU.favorites
+      });
+      if (UU) {
+        await EV.logEvent(UU, 'search', null, { query: msg, intent: (intent && intent.message) || '' });
+        EV.logRec(UU, msg, pipe.items.map((x) => x.id));
+        if (intent && intent.soft.occasion) UU.session[cid] = Object.assign(UU.session[cid] || {}, { occasion: intent.soft.occasion });
+        save();
+      }
       let text = answer.message;
       if (!text) {
         const bits = [crit.category ? ({ top: 'верх', bottom: 'низ', shoes: 'обувь', acc: 'аксессуары' })[crit.category] : '', crit.color, crit.maxPrice ? 'до ' + Number(crit.maxPrice).toLocaleString('ru-RU') + ' ₽' : ''].filter(Boolean);
         text = bits.length ? `Понял: ${bits.join(' · ')}. Показываю лучшее по твоему профилю.` : 'Подобрал варианты под твой профиль — смотри ниже.';
       }
-      out = { intent: answer.intent, searchCriteria: crit, message: text, products: pipe.items, total: pipe.total, conversationId: cid, aiMode: 'production', model: CFG.qwen.stylist.model };
+      if (pipe.relaxed && pipe.relaxed.length) {
+        const notes = { color2: 'убрал второй цвет', color: 'расширил цвета', fit: 'расширил посадку', style: 'расширил стиль', budget: 'чуть приподнял бюджет' };
+        text += ' ' + pipe.relaxed.map((k) => notes[k]).filter(Boolean).join(', ') + '.';
+      }
+      out = { intent: answer.intent || 'find_products', searchCriteria: crit, searchIntent: intent, relaxed: pipe.relaxed, message: text, suggestQuery: answer.suggestQuery || ((intent && intent.queries.normal) || msg), products: pipe.items, total: pipe.total, conversationId: cid, aiMode: 'production', model: CFG.qwen.stylist.model };
     } catch (e) {
       if (e.code === 'BAD_JSON') throw e;
       const d = demoBrain(msg, profile, ctx);
-      const pipe = await searchPipeline({ struct: d.searchCriteria, text: msg, profile, feedback, limit: 50, wardrobe: wr });
+      const pipe = await searchPipeline({
+        struct: d.searchCriteria, text: msg, profile, feedback, limit: 50, wardrobe: wr,
+        intent: baseIntent, taste: UU && UU.taste, favorites: UU && UU.favorites
+      });
       const prefix = e.code === 'NO_FUNDS' ? 'Баланс шлюза на нуле — пополни счёт, и отвечу по-настоящему. А пока: ' : '';
-      out = Object.assign({}, d, { message: prefix + d.message, products: pipe.items, total: pipe.total, conversationId: cid, aiMode: 'demo-fallback' });
+      out = Object.assign({}, d, { message: prefix + d.message, products: pipe.items, total: pipe.total, conversationId: cid, aiMode: 'demo-fallback', searchIntent: baseIntent, relaxed: pipe.relaxed });
     }
   }
   if (!out.products.length) out.message += '\n\nЖивые товары WB сейчас недоступны с этой сети, а выдуманных мы не показываем. Попробуй с другого интернета.';
@@ -464,7 +594,7 @@ async function explainProduct(productId, bodyProduct, uid) {
   if (!p.live) {
     try { analysis = await productAnalysis(p.id); } catch (e) { /* без анализа — честно */ }
   }
-  const ex = R.explain(scored, profile, analysis);
+  const ex = R.explain(scored, profile, analysis, { compatItems: scored.compatItems || [], redund: (scored.redund && scored.redund.score) || 0 });
   const b = r.parts;
   return {
     productId: p.id, score: r.score,
@@ -474,4 +604,4 @@ async function explainProduct(productId, bodyProduct, uid) {
     note: 'Оценки — эвристика sainvio под твой профиль, а не объективная метрика качества.'
   };
 }
-module.exports = { analyzePhoto, productAnalysis, searchPipeline, scoreCtx, chat, getWeather, demoVision, explainProduct };
+module.exports = { analyzePhoto, describeItem, productAnalysis, searchPipeline, scoreCtx, structFromIntent, chat, getWeather, demoVision, explainProduct };

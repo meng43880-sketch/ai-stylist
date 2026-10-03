@@ -1,5 +1,6 @@
 'use strict';
-/* recommend.js — детерминированный Recommendation Engine (8 факторов).
+/* recommend.js — детерминированный Recommendation Engine (8 базовых факторов
+   + wardrobe-совместимость; redundancy идёт штрафом, а не весом).
    AI НЕ придумывает итоговый процент: его считает код. Веса — из SCORE_WEIGHTS. */
 const { CFG } = require('./config');
 const STYLE_RU = { casual: 'Повседневный', smart: 'Smart casual', street: 'Streetwear', minimal: 'Минимализм', sport: 'Sport', oldmoney: 'Old money', business: 'Business casual', classic: 'Classic', tech: 'Techwear', oversize: 'Oversize', party: 'На выход' };
@@ -22,22 +23,24 @@ function currentSeason(d) {
   return 'winter';
 }
 function normTitle(t) { return String(t).toLowerCase().replace(/[^a-zа-я0-9]+/gi, ' ').trim(); }
-/* ctx: {profile, feedback{styleW,colorW,likes,dislikes}, season, occasion, analyses{id:analysis}} */
+/* ctx: {profile, feedback{styleW,colorW,likes,dislikes}, season, occasion,
+   analyses{id:analysis}, wardrobe[], favorites[]} */
 function scoreProduct(p, ctx) {
   const profile = ctx.profile || {};
   const fb = Object.assign({ styleW: {}, colorW: {}, likes: {}, dislikes: {} }, ctx.feedback || {});
   const W = (ctx.weights) || CFG.weights;
+  const pst = p.styles || [], pco = p.colors || [], psz = p.sizes || [];
   const pStyles = profile.styles || [];
-  const hit = p.styles.filter((s) => pStyles.includes(s)).length;
+  const hit = pst.filter((s) => pStyles.includes(s)).length;
   let style = pStyles.length ? 55 + Math.round(45 * (hit / Math.max(1, Math.min(2, pStyles.length)))) : 70;
-  p.styles.forEach((s) => { style += (fb.styleW[s] || 0); });
+  pst.forEach((s) => { style += (fb.styleW[s] || 0); });
   const pColors = profile.colors || [];
-  const chit = p.colors.filter((c) => pColors.includes(c)).length;
+  const chit = pco.filter((c) => pColors.includes(c)).length;
   let color = pColors.length ? (chit > 0 ? 88 + Math.min(10, chit * 5) : 58) : 70;
-  p.colors.forEach((c) => { color += (fb.colorW[c] || 0); });
+  pco.forEach((c) => { color += (fb.colorW[c] || 0); });
   const body = fitScore(p.fit, profile.build);
   const need = p.cat === 'shoes' ? String(profile.shoeSize || '') : p.cat === 'bottom' ? String(profile.pantsSize || '') : String(profile.topSize || '');
-  const size = (p.sizes.includes(need) || p.sizes.includes('One')) ? 100 : 42;
+  const size = (psz.includes(need) || psz.includes('One')) ? 100 : 42;
   const b = Number(profile.budget) || 5000;
   const budget = p.price <= b ? 100 : p.price <= b * 1.25 ? 68 : 40;
   let pref = 72;
@@ -66,9 +69,40 @@ function scoreProduct(p, ctx) {
   if (occ === 'date' || occ === 'party') season += p.styles.includes('party') || p.styles.includes('smart') ? 5 : -5;
   if (occ === 'sport') season += p.styles.includes('sport') ? 6 : -4;
   season = clamp(season);
-  const parts = { style: clamp(style), color: clamp(color), body, size, budget, pref: clamp(pref), quality, season };
-  const score = clamp(parts.style * W.style + parts.color * W.color + parts.body * W.body + parts.size * W.size + parts.budget * W.budget + parts.pref * W.pref + parts.quality * W.quality + parts.season * W.season);
-  return { score: Math.max(58, Math.min(98, score)), parts };
+  /* wardrobe compatibility (§23): лучшее пересечение по стилям/цветам +
+     бонус, если такой категории в гардеробе не хватает. */
+  const wr2 = ctx.wardrobe || [];
+  const haveCats = {};
+  wr2.forEach((w) => { if (w.cat) haveCats[w.cat] = true; });
+  let compat = 70, compatItems = [];
+  wr2.forEach((w) => {
+    const ss = (w.styles || []).filter((s) => pst.includes(s)).length;
+    const cc = (w.colors || []).filter((c) => pco.includes(c)).length;
+    let v = 55 + ss * 12 + cc * 8 + (p.cat && !haveCats[p.cat] ? 8 : 0);
+    if (v > compat) { compat = v; compatItems = [(w.id || w.title || '').slice(0, 40)]; }
+  });
+  compat = clamp(compat);
+  /* redundancy (§24): похожие вещи уже есть — штраф, а не ноль сразу. */
+  const redund = redundancy(p, wr2.concat(ctx.favorites || []));
+  const parts = { style: clamp(style), color: clamp(color), body, size, budget, pref: clamp(pref), quality, season, wardrobe: compat };
+  let score = parts.style * W.style + parts.color * W.color + parts.body * W.body
+    + parts.size * W.size + parts.budget * W.budget + parts.pref * W.pref
+    + parts.quality * W.quality + parts.season * W.season
+    + parts.wardrobe * (W.wardrobe || 0);
+  score = clamp(score - redund.score * 8);
+  return { score: Math.max(58, Math.min(98, score)), parts, compatItems, redund };
+}
+/* Похожесть: та же категория + ≥2 общих стиля/цвета. */
+function redundancy(p, items) {
+  const pst = p.styles || [], pco = p.colors || [];
+  let sim = 0; const ids = [];
+  (items || []).forEach((w) => {
+    if (!w || (w.cat && p.cat && w.cat !== p.cat)) return;
+    const ss = (w.styles || []).filter((s) => pst.includes(s)).length;
+    const cc = (w.colors || []).filter((c) => pco.includes(c)).length;
+    if (ss + cc >= 2) { sim++; if (w.id || w.title) ids.push(String(w.id || w.title).slice(0, 40)); }
+  });
+  return { score: Math.min(1, sim / 3), ids: ids.slice(0, 2) };
 }
 function rankProducts(products, ctx) {
   const seen = new Set();
@@ -78,7 +112,7 @@ function rankProducts(products, ctx) {
     if (seen.has(k)) return; // dedup
     seen.add(k);
     const r = scoreProduct(p, ctx);
-    out.push(Object.assign({}, p, { aiScore: r.score, aiParts: r.parts }));
+    out.push(Object.assign({}, p, { aiScore: r.score, aiParts: r.parts, compatItems: r.compatItems, redund: r.redund }));
   });
   return out.sort((a, b) => b.aiScore - a.aiScore);
 }
@@ -163,10 +197,10 @@ function nlParse(q) {  const s = (q || '').toLowerCase();
   if (sm) res.size = sm[1].toUpperCase();
   return res;
 }
-function explain(p, profile, analysis) {
-  const r = p.aiParts;
+function explain(p, profile, analysis, extra) {
+  const r = p.aiParts || {};
   const need = p.cat === 'shoes' ? profile.shoeSize : p.cat === 'bottom' ? profile.pantsSize : profile.topSize;
-  const sizeOk = p.sizes.includes(String(need)) || p.sizes.includes('One');
+  const sizeOk = (p.sizes || []).includes(String(need)) || (p.sizes || []).includes('One');
   const an = analysis || null;
   const qualityNote = an
     ? `Оценка основана на составе (${an.material}) и повторяющихся сигналах из отзывов.`
@@ -178,9 +212,11 @@ function explain(p, profile, analysis) {
       { key: 'body', title: 'Посадка', value: r.body, text: `Фасон «${p.fit}» визуально может подойти под указанные пропорции.` },
       { key: 'budget', title: 'Цена', value: r.budget, text: p.price <= profile.budget ? 'Укладывается в установленный бюджет.' : 'Выше бюджета, но посадка и стиль оценены высоко.' },
       { key: 'quality', title: 'Качество', value: r.quality, text: qualityNote },
-      { key: 'size', title: 'Размер', value: r.size, text: sizeOk ? `Размер ${need} доступен — AI считает его рекомендуемым вариантом.` : `Размера ${need} нет — оценка снижена.` }
+      { key: 'size', title: 'Размер', value: r.size, text: sizeOk ? `Размер ${need} доступен — AI считает его рекомендуемым вариантом.` : `Размера ${need} нет — оценка снижена.` },
+      { key: 'wardrobe', title: 'Гардероб', value: r.wardrobe == null ? 70 : r.wardrobe, text: ((extra && extra.compatItems) || []).length ? 'Хорошо сочетается с вещами, которые у тебя уже есть.' : 'Нейтрально к текущему гардеробу.' }
     ],
-    reviewSummary: an ? an.review_summary : null
+    reviewSummary: an ? an.review_summary : null,
+    redundancy: ((extra && extra.redund) || 0) > 0.6 ? 'У тебя уже есть несколько похожих моделей — эта оценена строже.' : null
   };
 }
-module.exports = { STYLE_RU, COLOR_RU, scoreProduct, rankProducts, buildOutfits, feedMix, nlParse, explain, currentSeason, fitScore, wardrobeInsights };
+module.exports = { STYLE_RU, COLOR_RU, scoreProduct, rankProducts, buildOutfits, feedMix, nlParse, explain, currentSeason, fitScore, wardrobeInsights, redundancy };

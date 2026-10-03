@@ -16,7 +16,15 @@ function blank() {
   return { profile: null, vision: null, favorites: [], outfits: [], wardrobe: [], usage: {}, feedback: { likes: {}, dislikes: {}, styleW: {}, colorW: {} }, history: [], chats: {}, users: [], sessions: {}, data: {}, cache: { analyses: {}, recs: {}, outfits: {}, queries: {}, weather: null, market: {} } };
 }
 function freshUserData() {
-  return { profile: null, vision: null, favorites: [], outfits: [], wardrobe: [], feedback: { likes: {}, dislikes: {}, styleW: {}, colorW: {} }, history: [], chats: {} };
+  return {
+    profile: null, vision: null, favorites: [], outfits: [], wardrobe: [],
+    feedback: { likes: {}, dislikes: {}, styleW: {}, colorW: {} },
+    history: [], chats: {},
+    /* Персональный стилист (§4): taste-векторы, события, история поисков и выдач */
+    taste: null, events: [], searches: [], recs: [],
+    measures: { chest: null, waist: null, hips: null, shoulder: null },
+    session: {}
+  };
 }
 let db = blank();
 try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch {}
@@ -90,8 +98,13 @@ function save() {
 }
 function UD(uid) {
   db.data = db.data || {};
-  db.data[uid] = db.data[uid] || freshUserData();
-  return db.data[uid];
+  const fresh = freshUserData();
+  const u = db.data[uid] || fresh;
+  /* Миграция старых аккаунтов: дотягиваем недостающие секции (§4). */
+  Object.keys(fresh).forEach((k) => { if (u[k] === undefined) u[k] = fresh[k]; });
+  if (!u.feedback) u.feedback = fresh.feedback;
+  db.data[uid] = u;
+  return u;
 }
 function getCache(ns, key, ttlMs) {
   const c = db.cache[ns] && db.cache[ns][key];
