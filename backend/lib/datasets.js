@@ -9,21 +9,11 @@
 const fs = require('fs');
 const path = require('path');
 const DIR = path.join(__dirname, '..', 'data', 'datasets');
-const SOURCES = [
-  {
-    name: 'wb-sample-1k',
-    url: 'https://raw.githubusercontent.com/luminati-io/Wildberries-dataset-sample/main/Wildberries-dataset-sample.csv',
-    file: 'wb-sample-1k.csv',
-    date: '2024-12',
-    origin: 'Bright Data, sample 1001 шт',
-    columns: (h) => ({
-      url: h.url, sku: h.sku, breadcrumbs: h.breadcrumbs, name: h.name,
-      rating: h.rating, review_count: h.review_count, image: h.image, brand: h.brand,
-      initial_price: h.initial_price, final_price: h.final_price, currency: h.currency,
-      variations: h.product_variation, details: h.product_details
-    })
-  }
-];
+/* Снимок WB 2024 удалён из выдачи по решению владельца: только свежее
+   (мост/лайв). SOURCES пуст — ensureLoaded() возвращает [] и ничего
+   не качает. Вернуть: восстановить запись {name, url, file, date, origin,
+   columns} (см. git pre-homefeed~ / коммит Restore WB 2024 dataset). */
+const SOURCES = [];
 let ROWS = null; // [{...product, _src}]
 let loading = null;
 function dir() { try { fs.mkdirSync(DIR, { recursive: true }); } catch {} }

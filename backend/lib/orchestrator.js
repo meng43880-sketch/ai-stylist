@@ -219,8 +219,9 @@ async function searchPipeline({ struct, text, profile, feedback, limit, wardrobe
       total += ds.total;
     }
   } catch (e) { /* датасет недоступен — идём дальше без него */ }
-  // Takprodam: легальный каталог с партнёрскими ссылками (нужен токен).
-  try {
+  /* Takprodam ВРЕМЕННО выведен из выдачи (флаг). Вернуть: TAKPRODAM_ENABLED=true.
+     Без флага провайдер даже не дёргается — ни запросов, ни пауз, ни 429. */
+  if ((process.env.TAKPRODAM_ENABLED || '').toLowerCase() === 'true') try {
     const svc = new M.MarketplaceService();
     const tp = await svc.search({
       marketplace: 'takprodam', query: text || '',
