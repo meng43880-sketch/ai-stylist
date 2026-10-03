@@ -703,6 +703,12 @@ async function askAI(text, img) {
   __asking = true;
   /* Свежая полоса стартует ПАРАЛЛЕЛЬНО серверу: пока AI думает, расширение печатает запрос в WB. */
   const extP = extLiveQuery(text);
+  /* Телефон без расширения: заказ живья через сервер-реле (домашнее расширение
+     подберёт по минутному тику). С расширением не дублируем — прямой мост быстрее. */
+  let relayQid = null;
+  if (!window.__extBridge) {
+    Api.post('/api/live/request', { query: text }).then((r) => { relayQid = r.data && r.data.qid; }).catch(() => {});
+  }
   if (S.route !== 'home') go('home');
   S.cid = S.cid || ('c' + Date.now());
   const lastMe = [...S.chat].reverse().find((x) => x.role === 'me');
@@ -745,6 +751,30 @@ async function askAI(text, img) {
     /* Свежая полоса от расширения — НЕ ждём: базу показываем сразу (fin),
        живьё доклеится в открытую страницу, когда приедет. Так было 46с. */
     fin(patch);
+    if (relayQid) {
+      let tries = 0;
+      const pollRelay = async () => {
+        tries++;
+        try {
+          const rr = await Api.get('/api/live/result?qid=' + encodeURIComponent(relayQid));
+          if (rr.data && rr.data.status === 'done') {
+            (rr.data.items || []).forEach((p) => { RC[p.id] = p; });
+            const lr2 = S.lastResult;
+            if (lr2 && lr2.query === text) {
+              lr2.live = lr2.live || [];
+              const s2 = new Set(lr2.live);
+              (rr.data.items || []).forEach((p) => { if (!s2.has(p.id)) { s2.add(p.id); lr2.live.push(p.id); } });
+              lr2.live = lr2.live.slice(0, 12);
+              try { toast('Живьём: свежие с WB'); } catch (e) {}
+              if (S.route === 'results') render();
+            }
+            return;
+          }
+        } catch (e) {}
+        if (tries < 9) setTimeout(pollRelay, 10000);
+      };
+      setTimeout(pollRelay, 20000);
+    }
     extP.then(async (ex) => {
       if (!ex.length) return;
       try {

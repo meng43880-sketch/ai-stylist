@@ -297,5 +297,43 @@ chrome.runtime.onMessage.addListener((m, sender, sendResponse) => {
     return true;
   }
 });
-chrome.alarms.onAlarm.addListener((a) => { if (a && a.name === 'hf') runCollect(); });
-chrome.runtime.onInstalled.addListener(() => { chrome.alarms.create('hf', { periodInMinutes: 360 }); });
+/* Релей телефона: раз в минуту забираем висящие заказы на живой поиск,
+   печатаем как человек и кладём ответ обратно. Очередь живёт 3 мин. */
+async function pollRelay() {
+  try {
+    const cfg = await chrome.storage.local.get(['backend', 'key', 'liveSeen', 'running']);
+    if (!cfg.backend || !cfg.key || cfg.running) return;
+    const base = cfg.backend.replace(/\/$/, '');
+    const r = await fetch(base + '/api/live/pending', { headers: { 'x-collector-key': cfg.key } });
+    const j = await r.json();
+    const jobs = ((j && j.data) || []).filter((x) => x && x.qid && x.query);
+    if (!jobs.length) return;
+    const seen = cfg.liveSeen || [];
+    const job = jobs.find((x) => !seen.includes(x.qid));
+    if (!job) return;
+    const res = await runLiveQuery(job.query);
+    if (res.busy) return;
+    await fetch(base + '/api/live/deliver', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-collector-key': cfg.key },
+      body: JSON.stringify({ qid: job.qid, items: res.items || [] })
+    });
+    await chrome.storage.local.set({ liveSeen: [...seen, job.qid].slice(-20) });
+    await log('relay «' + String(job.query).slice(0, 25) + '»: ' + (res.items || []).length);
+  } catch (e) { /* следующий тик */ }
+}
+chrome.alarms.onAlarm.addListener((a) => {
+  if (!a) return;
+  if (a.name === 'hf') runCollect();
+  if (a.name === 'relay') pollRelay();
+});
+/* onInstalled не стреляет при ручной перезагрузке unpacked — будильники
+   создаём защитно при каждом старте воркера (если их нет). */
+try {
+  chrome.alarms.get('hf', (a) => { if (!a) chrome.alarms.create('hf', { periodInMinutes: 360 }); });
+  chrome.alarms.get('relay', (a) => { if (!a) chrome.alarms.create('relay', { periodInMinutes: 1 }); });
+} catch (e) {}
+chrome.runtime.onInstalled.addListener(() => {
+  chrome.alarms.create('hf', { periodInMinutes: 360 });
+  chrome.alarms.create('relay', { periodInMinutes: 1 });
+});

@@ -19,6 +19,8 @@ const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=u
 /* rate limiting: 60 req/min с IP; auth — строже (10/мин против перебора) */
 const hits = new Map();
 const authHits = new Map();
+/* live relay: заказы телефона на живой поиск (память, TTL 3 мин) */
+const liveQ = new Map();
 function rateOk(ip) {
   const now = Date.now(); const arr = (hits.get(ip) || []).filter((t) => now - t < 60000);
   arr.push(now); hits.set(ip, arr);
@@ -62,7 +64,7 @@ function authUid(req) {
   return u.id;
 }
 /* Публичные ручки (без токена). Всё остальное /api — только со входом. */
-const PUBLIC_API = ['/api/status', '/api/context', '/api/market/wb/search', '/api/market/ozon/search', '/api/market/link', '/api/collector/push', '/api/collector/status'];
+const PUBLIC_API = ['/api/status', '/api/context', '/api/market/wb/search', '/api/market/ozon/search', '/api/market/link', '/api/collector/push', '/api/collector/status', '/api/live/pending', '/api/live/deliver'];
 
 async function route(req, res) {
   const url = new URL(req.url, 'http://x');
@@ -276,6 +278,57 @@ async function route(req, res) {
       const out = HF.setItems(b.items);
       logHistory('collector', `Мост: принято ${out.accepted}`, uid);
       return send(res, 200, { ok: true, data: out });
+    }
+    /* --- live relay: телефон без расширения ←→ домашнее расширение.
+       Очередь в памяти (TTL 3 мин, редеплой её роняет — заказы просто пропадут,
+       страница молча останется на снимке):
+       POST /api/live/request (user-токен) → GET /api/live/pending (секрет) →
+       POST /api/live/deliver (секрет, скоринг под профиль заказчика) →
+       GET /api/live/result?qid (user-токен). --- */
+    if (p.startsWith('/api/live/')) {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-collector-key, Authorization');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      if (m === 'OPTIONS') { res.writeHead(200); res.end(); return; }
+      const now = Date.now();
+      for (const [k, v] of liveQ) if (now - v.ts > 3 * 60 * 1000) liveQ.delete(k);
+      if ((p === '/api/live/pending' || p === '/api/live/deliver')
+        && (!process.env.COLLECTOR_KEY || String(req.headers['x-collector-key'] || '') !== process.env.COLLECTOR_KEY))
+        return send(res, 403, { ok: false, code: 'AUTH', error: 'Нет доступа' });
+      if (m === 'POST' && p === '/api/live/request') {
+        const b = await readBody(req);
+        const query = String(b.query || '').slice(0, 60).trim();
+        if (!query) return send(res, 400, { ok: false, error: 'Пустой запрос' });
+        for (const [k, v] of liveQ) {
+          if (v.uid === uid && v.status === 'pending')
+            return send(res, 200, { ok: true, data: { qid: k, reused: true } });
+        }
+        const qid = require('crypto').randomBytes(12).toString('hex');
+        liveQ.set(qid, { query, uid, ts: now, status: 'pending', items: [] });
+        return send(res, 200, { ok: true, data: { qid } });
+      }
+      if (m === 'GET' && p === '/api/live/pending') {
+        return send(res, 200, {
+          ok: true,
+          data: [...liveQ].filter(([, v]) => v.status === 'pending').map(([qid, v]) => ({ qid, query: v.query, ts: v.ts }))
+        });
+      }
+      if (m === 'POST' && p === '/api/live/deliver') {
+        const b = await readBody(req);
+        const job = liveQ.get(b.qid);
+        if (!job) return send(res, 404, { ok: false, error: 'Заказ не найден' });
+        const U = UD(job.uid);
+        const scored = M.scoreLive((b.items || []).slice(0, 30), O.scoreCtx(profile(U), feedback(U), { wardrobe: U.wardrobe })).slice(0, 12);
+        liveQ.set(b.qid, Object.assign({}, job, { status: 'done', items: scored, ts: Date.now() }));
+        return send(res, 200, { ok: true, data: { delivered: scored.length } });
+      }
+      if (m === 'GET' && p === '/api/live/result') {
+        const job = liveQ.get(String(url.searchParams.get('qid') || ''));
+        if (!job || job.uid !== uid) return send(res, 404, { ok: false, error: 'Не найдено' });
+        if (job.status !== 'done') return send(res, 200, { ok: true, data: { status: 'pending' } });
+        return send(res, 200, { ok: true, data: { status: 'done', items: job.items } });
+      }
+      return send(res, 404, { ok: false, error: 'Не найдено' });
     }
     /* Партнёрская обёртка ссылки: frontend зовёт перед открытием магазина. */
     if (m === 'GET' && p === '/api/market/link') {
