@@ -748,53 +748,49 @@ async function askAI(text, img) {
         patch.live = (s.items || []).slice(0, 10).map((p) => p.id);
       } else patch.liveBlocked = true;
     } catch (e) { patch.liveBlocked = true; }
-    /* Свежая полоса от расширения — НЕ ждём: базу показываем сразу (fin),
-       живьё доклеится в открытую страницу, когда приедет. Так было 46с. */
-    fin(patch);
+    /* Живьё ЖДЁМ до показа (дедлайн 75с): пусть дольше крутится спиннер,
+       зато сразу свежие. Не дождались — показываем базу как есть. */
+    const deadline = Date.now() + 75000;
+    const remain = () => Math.max(0, deadline - Date.now());
+    const mergeIds = (ids) => {
+      patch.live = patch.live || [];
+      const s = new Set(patch.live);
+      ids.forEach((id) => { if (RC[id] && !s.has(id)) { s.add(id); patch.live.push(id); } });
+      patch.live = patch.live.slice(0, 12);
+    };
+    const scoreEx = async (ex) => {
+      if (!ex.length) return;
+      try {
+        const s = await Api.post('/api/market/score', { items: ex.slice(0, 30), struct: {} });
+        (s.items || []).forEach((p) => { RC[p.id] = p; });
+        mergeIds((s.items || []).map((p) => p.id));
+      } catch (se) {
+        const fb2 = demoFb();
+        ex.slice(0, 30).forEach((p) => { try { const rr = Demo.score(p, S.profile, fb2); RC[p.id] = Object.assign({}, p, { aiScore: rr.score, aiParts: rr.parts }); } catch (ee) {} });
+        mergeIds(ex.slice(0, 30).map((p) => p.id));
+      }
+    };
+    try {
+      const ex = await Promise.race([extP, new Promise((res) => setTimeout(() => res([]), remain()))]);
+      await scoreEx(ex);
+    } catch (e) {}
     if (relayQid) {
-      let tries = 0;
-      const pollRelay = async () => {
+      let tries = 0, done = false;
+      while (!done && Date.now() < deadline && tries < 8) {
         tries++;
         try {
           const rr = await Api.get('/api/live/result?qid=' + encodeURIComponent(relayQid));
           if (rr.data && rr.data.status === 'done') {
             (rr.data.items || []).forEach((p) => { RC[p.id] = p; });
-            const lr2 = S.lastResult;
-            if (lr2 && lr2.query === text) {
-              lr2.live = lr2.live || [];
-              const s2 = new Set(lr2.live);
-              (rr.data.items || []).forEach((p) => { if (!s2.has(p.id)) { s2.add(p.id); lr2.live.push(p.id); } });
-              lr2.live = lr2.live.slice(0, 12);
-              try { toast('Живьём: свежие с WB'); } catch (e) {}
-              if (S.route === 'results') render();
-            }
-            return;
+            mergeIds((rr.data.items || []).map((p) => p.id));
+            try { toast('Живьём: свежие с WB'); } catch (e) {}
+            done = true;
           }
         } catch (e) {}
-        if (tries < 9) setTimeout(pollRelay, 10000);
-      };
-      setTimeout(pollRelay, 20000);
+        if (!done && Date.now() < deadline) await new Promise((res) => setTimeout(res, 8000));
+      }
     }
-    extP.then(async (ex) => {
-      if (!ex.length) return;
-      try {
-        try {
-          const s = await Api.post('/api/market/score', { items: ex.slice(0, 30), struct: {} });
-          (s.items || []).forEach((p) => { RC[p.id] = p; });
-        } catch (se) {
-          const fb2 = demoFb();
-          ex.slice(0, 30).forEach((p) => { try { const rr = Demo.score(p, S.profile, fb2); RC[p.id] = Object.assign({}, p, { aiScore: rr.score, aiParts: rr.parts }); } catch (ee) {} });
-        }
-        const lr = S.lastResult;
-        if (!lr) return;
-        lr.live = lr.live || [];
-        const seenL = new Set(lr.live);
-        ex.slice(0, 30).forEach((p) => { if (RC[p.id] && !seenL.has(p.id)) { seenL.add(p.id); lr.live.push(p.id); } });
-        lr.live = lr.live.slice(0, 12);
-        if (S.route === 'results') render();
-      } catch (e) {}
-    });
-    return;
+    fin(patch);
   } catch (e) {
     /* Нет backend (статический хостинг): локальный демо-мозг + живьём с WB. */
     try {
