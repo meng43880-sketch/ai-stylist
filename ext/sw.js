@@ -95,19 +95,7 @@ async function runCollect() {
       const t = await wbTabSend('humanSearch', null, qq);
       tabId = t.tabId; mine = t.mine;
       if (!t.res || !t.res.ok) throw new Error((t.res && t.res.error) || 'пусто');
-      const list = (t.res.items || []).map((c) => ({
-        id: 'wb' + c.id, nmId: c.id, title: String(c.title || '').slice(0, 120),
-        price: c.price, old: Math.round(c.price * 1.2),
-        /* Фото из DOM карточки (верный хост) с подъёмом tm→big;
-           конструктор basket — только запасной (таблица хостов дрейфует). */
-        img: (c.img && c.img.includes('/photos/')) ? c.img.replace('/tm/', '/big/') : wbPhoto(c.id),
-        mp: 'WB', brand: '',
-        cat: wbCat(c.title), colors: [], sizes: ['One'], styles: [], fit: 'regular',
-        rating: 0, reviews: 0,
-        live: true, source: 'homefeed',
-        url: `https://www.wildberries.ru/catalog/${c.id}/detail.aspx`,
-        fetchedAt: Date.now(), desc: ''
-      })).filter((p) => p.title && p.price > 0);
+      const list = (t.res.items || []).map(mapHuman).filter((p) => p.title && p.price > 0);
       list.forEach((p) => { if (!seen.has(p.id)) { seen.add(p.id); out.push(p); } });
       fails = 0;
       await log('+ ' + qq + ': ' + list.length + ' (всего ' + out.length + ')');
@@ -133,6 +121,53 @@ async function runCollect() {
   await closeTab();
   await chrome.storage.local.set({ running: false, lastRun: Date.now(), lastCount: out.length });
 }
-chrome.runtime.onMessage.addListener((m) => { if (m && m.type === 'collect') runCollect(); });
+function mapHuman(c) {
+  return {
+    id: 'wb' + c.id, nmId: c.id, title: String(c.title || '').slice(0, 120),
+    price: c.price, old: Math.round(c.price * 1.2),
+    /* Фото из DOM карточки (верный хост) с подъёмом tm→big;
+       конструктор basket — только запасной (таблица хостов дрейфует). */
+    img: (c.img && c.img.includes('/photos/')) ? c.img.replace('/tm/', '/big/') : wbPhoto(c.id),
+    mp: 'WB', brand: '',
+    cat: wbCat(c.title), colors: [], sizes: ['One'], styles: [], fit: 'regular',
+    rating: 0, reviews: 0,
+    live: true, source: 'homefeed',
+    url: `https://www.wildberries.ru/catalog/${c.id}/detail.aspx`,
+    fetchedAt: Date.now(), desc: ''
+  };
+}
+/* liveQuery: страница sainvio просит ОДИН человеческий поиск под запрос
+   пользователя (~10-15с). Если идёт полный сбор — отвечаем busy, страница
+   молча берёт снимок. */
+let __liveBusy = false;
+async function runLiveQuery(query) {
+  if (__liveBusy) return { busy: true };
+  const o = await chrome.storage.local.get('running');
+  if (o.running) return { busy: true };
+  __liveBusy = true;
+  let tabId = null, mine = false;
+  const closeTab = async () => { if (mine && tabId) { try { await chrome.tabs.remove(tabId); } catch (e) {} mine = false; } };
+  try {
+    const t = await wbTabSend('humanSearch', null, String(query).slice(0, 60));
+    tabId = t.tabId; mine = t.mine;
+    if (!t.res || !t.res.ok) return { items: [] };
+    const items = (t.res.items || []).map(mapHuman).filter((p) => p.title && p.price > 0).slice(0, 30);
+    await log('live «' + query.slice(0, 30) + '»: ' + items.length);
+    return { items };
+  } catch (e) {
+    await log('live ERR ' + e.message);
+    return { items: [] };
+  } finally {
+    await closeTab();
+    __liveBusy = false;
+  }
+}
+chrome.runtime.onMessage.addListener((m, sender, sendResponse) => {
+  if (m && m.type === 'collect') { runCollect(); return; }
+  if (m && m.type === 'liveQuery') {
+    runLiveQuery(m.query || '').then(sendResponse);
+    return true;
+  }
+});
 chrome.alarms.onAlarm.addListener((a) => { if (a && a.name === 'hf') runCollect(); });
 chrome.runtime.onInstalled.addListener(() => { chrome.alarms.create('hf', { periodInMinutes: 360 }); });

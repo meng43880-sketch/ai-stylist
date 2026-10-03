@@ -589,6 +589,23 @@ function outfitCard(o) {
 }
 function scrollMsgs() { setTimeout(() => { const m = $('#msgs'); if (m) m.scrollTop = m.scrollHeight; }, 80); }
 
+/* Расширение-человек: печатает запрос в WB (~10-15с) и отдаёт до 30 свежих.
+   Нет расширения — тихий [] по таймауту. */
+function extLiveQuery(query) {
+  return new Promise((resolve) => {
+    const reqId = 'q' + Date.now().toString(36);
+    let to = null, done = false;
+    const over = (v) => { if (!done) { done = true; if (to) clearTimeout(to); window.removeEventListener('message', h); resolve(v); } };
+    function h(e) {
+      if (!e || e.source !== window || !e.data || e.data.src !== 'sainvio-ext' || e.data.reqId !== reqId) return;
+      over(e.data.busy ? [] : (e.data.items || []));
+    }
+    to = setTimeout(() => over([]), 25000);
+    window.addEventListener('message', h);
+    try { window.postMessage({ src: 'sainvio-web', want: 'liveQuery', query: String(query || '').slice(0, 60), reqId }, '*'); }
+    catch (e) { over([]); }
+  });
+}
 /* чат: вопрос → backend → ответ встраивается в главную */
 window.ask = function (t) { askAI(t); };
 window.send = function () { const i = $('#ainput'); if (i) { askAI(i.value); i.value = ''; autoGrow(i); } };
@@ -636,6 +653,8 @@ async function askAI(text, img) {
   if ((!text && !img) || __asking) return;
   if (!Api.ok && img) { toast('Фото ищет только онлайн с подключённым AI'); return; }
   __asking = true;
+  /* Свежая полоса стартует ПАРАЛЛЕЛЬНО серверу: пока AI думает, расширение печатает запрос в WB. */
+  const extP = extLiveQuery(text);
   if (S.route !== 'home') go('home');
   S.cid = S.cid || ('c' + Date.now());
   const lastMe = [...S.chat].reverse().find((x) => x.role === 'me');
@@ -675,6 +694,27 @@ async function askAI(text, img) {
         patch.live = (s.items || []).slice(0, 10).map((p) => p.id);
       } else patch.liveBlocked = true;
     } catch (e) { patch.liveBlocked = true; }
+    /* Свежая полоса от расширения-человека: до 30 под этот запрос — в живьё. */
+    try {
+      const ex = await Promise.race([extP, new Promise((res) => setTimeout(() => res([]), 20000))]);
+      if (ex.length) {
+        const mergeLive = (ids) => {
+          patch.live = patch.live || [];
+          const seenL = new Set(patch.live);
+          ids.forEach((id) => { if (RC[id] && !seenL.has(id)) { seenL.add(id); patch.live.push(id); } });
+          patch.live = patch.live.slice(0, 12);
+        };
+        try {
+          const s = await Api.post('/api/market/score', { items: ex.slice(0, 30), struct: {} });
+          (s.items || []).forEach((p) => { RC[p.id] = p; });
+          mergeLive((s.items || []).map((p) => p.id));
+        } catch (se) {
+          const fb2 = demoFb();
+          ex.slice(0, 30).forEach((p) => { try { const rr = Demo.score(p, S.profile, fb2); RC[p.id] = Object.assign({}, p, { aiScore: rr.score, aiParts: rr.parts }); } catch (ee) {} });
+          mergeLive(ex.slice(0, 30).map((p) => p.id));
+        }
+      }
+    } catch (e) {}
     fin(patch);
   } catch (e) {
     /* Нет backend (статический хостинг): локальный демо-мозг + живьём с WB. */

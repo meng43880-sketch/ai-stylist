@@ -15,6 +15,15 @@
       "matches": ["https://www.wildberries.ru/*"],
       "js": ["content.js"],
       "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://ai-stylist-u58z.onrender.com/*",
+        "http://127.0.0.1:8001/*",
+        "http://localhost:8001/*"
+      ],
+      "js": ["bridge.js"],
+      "run_at": "document_idle"
     }
   ],
   "background": {
