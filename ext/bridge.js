@@ -3,6 +3,9 @@
    от приложения {src:'sainvio-web', want:'liveQuery', query, reqId},
    пересылает в service worker (у него доступ к вкладке WB) и возвращает
    ответ обратно странице {src:'sainvio-ext', reqId, items|busy}. */
+/* Маяк для страницы: «мост на месте». Страница показывает подсказку,
+   только если маяка нет (а не ждёт 35с в пустоту). */
+try { window.postMessage({ src: 'sainvio-ext', hello: true }, '*'); } catch (e) {}
 window.addEventListener('message', (e) => {
   if (e.source !== window || !e.data || e.data.src !== 'sainvio-web') return;
   if (e.data.want !== 'liveQuery' || !e.data.query) return;

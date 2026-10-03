@@ -591,7 +591,18 @@ function scrollMsgs() { setTimeout(() => { const m = $('#msgs'); if (m) m.scroll
 
 /* Расширение-человек: печатает запрос в WB (~10-15с) и отдаёт до 30 свежих.
    Нет расширения — тихий [] по таймауту. */
+window.__extBridge = false; window.__extHintShown = false;
+window.addEventListener('message', (e) => {
+  if (e && e.source === window && e.data && e.data.src === 'sainvio-ext' && e.data.hello) window.__extBridge = true;
+});
 function extLiveQuery(query) {
+  if (!window.__extBridge) {
+    if (!window.__extHintShown) {
+      window.__extHintShown = true;
+      try { toast('Живьё: обнови расширение и страницу'); } catch (e) {}
+    }
+    return Promise.resolve([]);
+  }
   return new Promise((resolve) => {
     const reqId = 'q' + Date.now().toString(36);
     let to = null, done = false;
