@@ -213,13 +213,20 @@ async function healList(items, say) {
     groups.get(q.vol).list.push({ p, q });
   });
   if (say) await say('Томов: ' + groups.size);
+  /* Кэш выученных хостов: живьё чинится за секунды, полный перебор —
+     только для невиданных томов. */
+  let hostmap = {};
+  try { hostmap = (await chrome.storage.local.get('hostmap')).hostmap || {}; } catch (e) {}
+  const saveMap = async () => { try { await chrome.storage.local.set({ hostmap }); } catch (e) {} };
   const fixed = [];
   for (const [vol, g] of groups) {
     const cand = [];
+    const known = hostmap[vol];
+    if (known) cand.push([known.host, known.dom, known.path]);
     cand.push([g.host, 'wbbasket.ru', 'images'], [g.host, 'wb.ru', 'photos']);
     for (let h = 1; h <= 33; h++) {
       const hh = String(h).padStart(2, '0');
-      if (hh !== g.host) cand.push([hh, 'wbbasket.ru', 'images']);
+      if (hh !== g.host && (!known || hh !== known.host)) cand.push([hh, 'wbbasket.ru', 'images']);
     }
     let win = null;
     for (const [hh, dom, path] of cand) {
@@ -233,9 +240,11 @@ async function healList(items, say) {
         p.img = img;
         fixed.push({ id: p.id, title: p.title, price: p.price, img });
       });
+      hostmap[vol] = win;
       if (say) await say(`vol${vol}: хост ${win.host} (${g.list.length} шт)`);
     } else if (say) await say(`vol${vol}: не нашёлся — пропускаю`);
   }
+  await saveMap();
   return fixed;
 }
 async function healPhotos() {
