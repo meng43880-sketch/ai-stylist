@@ -12,7 +12,15 @@ const QUERY_SETS = [
   ['шапка', 'шарф', 'перчатки', 'носки', 'ремень', 'очки', 'кепка', 'рюкзак'],
   ['пальто', 'ветровка', 'пуховик', 'толстовка', 'юбка', 'свитшот', 'кеды', 'чиносы']
 ];
-const QUERIES = QUERY_SETS[Math.floor(Date.now() / 86400000) % QUERY_SETS.length];
+/* Набор на прогон: ручной выбор из попапа (для второго профиля Chrome —
+   storage.local у профилей раздельное) либо авто по дню. */
+async function pickQueries() {
+  try {
+    const o = await chrome.storage.local.get('set');
+    if (o.set !== undefined && o.set !== 'auto' && QUERY_SETS[+o.set]) return QUERY_SETS[+o.set];
+  } catch (e) {}
+  return QUERY_SETS[Math.floor(Date.now() / 86400000) % QUERY_SETS.length];
+}
 const PER_QUERY = 30;
 const PAUSE_MS = 2500;
 const BASKET = [[143, '01'], [287, '02'], [431, '03'], [575, '04'], [719, '05'], [863, '06'], [1007, '07'], [1151, '08'], [1295, '09'], [1439, '10'], [1583, '11'], [1727, '12'], [1871, '13'], [2015, '14'], [2159, '15'], [2303, '16'], [2447, '17'], [2591, '18'], [2735, '19'], [2879, '20'], [3023, '21'], [3167, '22'], [3311, '23'], [3455, '24'], [3599, '25'], [3743, '26'], [3887, '27'], [4031, '28'], [4175, '29'], [4319, '30'], [4463, '31'], [4607, '32'], [4751, '33']];
@@ -75,6 +83,7 @@ async function runCollect() {
   const key = cfg.key || '';
   if (!backend || !key) { await log('Нет backend/key — впиши в попапе'); return; }
   await chrome.storage.local.set({ running: true });
+  const QUERIES = await pickQueries();
   await log('Старт: ' + QUERIES.length + ' запросов (через вкладку WB)');
   const seen = new Set(), out = [];
   let fails = 0, tabId = null, mine = false;

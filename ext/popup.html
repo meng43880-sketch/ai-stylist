@@ -16,6 +16,13 @@ button:disabled{opacity:.5}
 <input id="backend" placeholder="https://xxx.onrender.com">
 <label>COLLECTOR_KEY</label>
 <input id="key" placeholder="секрет из backend/.env">
+<label>Набор запросов (второй профиль — другой набор)</label>
+<select id="set" style="width:100%;box-sizing:border-box;padding:8px;border:1.5px solid #ddd;border-radius:8px;font-size:13px">
+<option value="auto">Авто (по дню)</option>
+<option value="0">Набор 1 — база</option>
+<option value="1">Набор 2 — аксессуары</option>
+<option value="2">Набор 3 — верхняя одежда</option>
+</select>
 <button id="go">Собрать и отправить</button>
 <div id="st"></div>
 <div id="log"></div>

@@ -38,7 +38,9 @@ const QUERY_SETS = [
   ['шапка', 'шарф', 'перчатки', 'носки', 'ремень', 'очки', 'кепка', 'рюкзак'],
   ['пальто', 'ветровка', 'пуховик', 'толстовка', 'юбка', 'свитшот', 'кеды', 'чиносы']
 ];
-const QUERIES = QUERY_SETS[Math.floor(Date.now() / 86400000) % QUERY_SETS.length];
+/* COLLECTOR_SET=0/1/2 — зафиксировать набор, иначе авто по дню. */
+const FIX = parseInt((loadEnv().COLLECTOR_SET || '').trim(), 10);
+const QUERIES = (Number.isInteger(FIX) && QUERY_SETS[FIX]) ? QUERY_SETS[FIX] : QUERY_SETS[Math.floor(Date.now() / 86400000) % QUERY_SETS.length];
 const PER_QUERY = 30;
 const PAUSE_MS = 2500;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

@@ -1,9 +1,10 @@
 'use strict';
 const $ = (id) => document.getElementById(id);
 (async () => {
-  const cfg = await chrome.storage.local.get(['backend', 'key']);
+  const cfg = await chrome.storage.local.get(['backend', 'key', 'set']);
   if (cfg.backend) $('backend').value = cfg.backend;
   if (cfg.key) $('key').value = cfg.key;
+  $('set').value = cfg.set || 'auto';
   const draw = async () => {
     const o = await chrome.storage.local.get(['log', 'running', 'lastRun', 'lastCount']);
     $('log').innerHTML = (o.log || []).slice(-12).map((s) => `<div>${s}</div>`).join('');
@@ -16,7 +17,7 @@ const $ = (id) => document.getElementById(id);
   await draw();
   setInterval(draw, 2000);
   $('go').onclick = async () => {
-    await chrome.storage.local.set({ backend: $('backend').value.trim(), key: $('key').value.trim(), log: [] });
+    await chrome.storage.local.set({ backend: $('backend').value.trim(), key: $('key').value.trim(), set: $('set').value, log: [] });
     chrome.runtime.sendMessage({ type: 'collect' });
     await draw();
   };
