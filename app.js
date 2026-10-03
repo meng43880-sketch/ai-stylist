@@ -613,7 +613,7 @@ function extLiveQuery(query) {
       if (items.length) { try { toast('Расширение: свежих ' + items.length); } catch (te) {} }
       over(items);
     }
-    to = setTimeout(() => over([]), 35000);
+    to = setTimeout(() => over([]), 50000);
     window.addEventListener('message', h);
     try { window.postMessage({ src: 'sainvio-web', want: 'liveQuery', query: String(query || '').slice(0, 60), reqId }, '*'); }
     catch (e) { over([]); }
@@ -709,7 +709,7 @@ async function askAI(text, img) {
     } catch (e) { patch.liveBlocked = true; }
     /* Свежая полоса от расширения-человека: до 30 под этот запрос — в живьё. */
     try {
-      const ex = await Promise.race([extP, new Promise((res) => setTimeout(() => res([]), 30000))]);
+      const ex = await Promise.race([extP, new Promise((res) => setTimeout(() => res([]), 45000))]);
       if (ex.length) {
         const mergeLive = (ids) => {
           patch.live = patch.live || [];

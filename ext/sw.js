@@ -147,12 +147,13 @@ async function runLiveQuery(query) {
   __liveBusy = true;
   let tabId = null, mine = false;
   const closeTab = async () => { if (mine && tabId) { try { await chrome.tabs.remove(tabId); } catch (e) {} mine = false; } };
+  const t0 = Date.now();
   try {
     const t = await wbTabSend('humanSearch', null, String(query).slice(0, 60));
     tabId = t.tabId; mine = t.mine;
     if (!t.res || !t.res.ok) return { items: [] };
     const items = (t.res.items || []).map(mapHuman).filter((p) => p.title && p.price > 0).slice(0, 30);
-    await log('live «' + query.slice(0, 30) + '»: ' + items.length);
+    await log('live «' + query.slice(0, 30) + '»: ' + items.length + ' за ' + Math.round((Date.now() - t0) / 1000) + 'с');
     return { items };
   } catch (e) {
     await log('live ERR ' + e.message);

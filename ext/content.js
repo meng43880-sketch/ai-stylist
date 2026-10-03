@@ -64,14 +64,17 @@ async function humanSearch(query) {
   /* Ленивая загрузка: без прокрутки половина img — пустышки (data:),
      и сборщик уносит мусор вместо фото. Скроллим всю выдачу ступенями. */
   try {
-    const h = document.body.scrollHeight;
-    for (let s = 1; s <= 5; s++) {
-      window.scrollTo(0, Math.round((h / 5) * s));
-      await HSLEEP(700);
-      if (findCards().length >= 25) break;
+    /* Хватает и верха выдачи: дальше 15 карточек уже есть — не скроллим. */
+    if (findCards().length < 15) {
+      const h = document.body.scrollHeight;
+      for (let s = 1; s <= 3; s++) {
+        window.scrollTo(0, Math.round((h / 3) * s));
+        await HSLEEP(700);
+        if (findCards().length >= 25) break;
+      }
+      window.scrollTo(0, 0);
+      await HSLEEP(400);
     }
-    window.scrollTo(0, 0);
-    await HSLEEP(400);
   } catch (e) {}
   cards = findCards();
   return cards.slice(0, 30).map(readCard).filter(Boolean);
