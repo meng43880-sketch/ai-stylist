@@ -31,7 +31,18 @@ window.__fb = function (el) {
       }
     }
   } catch (e) {}
-  el.onerror = null; el.src = FALLBACK;
+  /* Финал: вместо одной заглушки на всех — нейтральная плашка с иконкой,
+     оттенок по хешу URL (разные битые фото выглядят по-разному). */
+  try {
+    let h = 0;
+    for (const ch of src) h = (h * 31 + ch.charCodeAt(0)) % 997;
+    const grads = [
+      'linear-gradient(135deg,#E8E8EC,#D5D5DB)', 'linear-gradient(135deg,#E4E7EE,#CFD6E4)',
+      'linear-gradient(135deg,#EFE8E2,#DED2C6)', 'linear-gradient(135deg,#E6EBE4,#CFD8CC)'
+    ];
+    const g = grads[h % grads.length];
+    el.outerHTML = `<span class="nophoto" style="background:${g}">${ic('shirt', 34)}</span>`;
+  } catch (ee) { el.onerror = null; el.src = FALLBACK; }
 };
 const IM = (src, alt) => `<img src="${src}" alt="${esc(alt || '')}" loading="lazy" onerror="__fb(this)">`;
 function toast(t) {
