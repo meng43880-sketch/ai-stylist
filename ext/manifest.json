@@ -7,8 +7,8 @@
   "host_permissions": [
     "https://search.wb.ru/*",
     "https://www.wildberries.ru/*",
-    "https://basket-*.wb.ru/*",
-    "https://basket-*.wbbasket.ru/*",
+    "https://*.wb.ru/*",
+    "https://*.wbbasket.ru/*",
     "https://*.onrender.com/*",
     "http://127.0.0.1:8001/*"
   ],
