@@ -108,6 +108,12 @@ async function runCollect() {
   }
   await closeTab();
   if (!out.length) { await chrome.storage.local.set({ running: false }); return; }
+  /* Авточинка только что собранного: чиним фото сразу, без кнопки. */
+  try {
+    await log('Чиню фото собранного…');
+    const n = (await healList(out, null)).length;
+    await log('Починено: ' + n + ' из ' + out.length);
+  } catch (e) { await log('heal ERR ' + e.message); }
   try {
     const r = await fetch(backend + '/api/collector/push', {
       method: 'POST',
@@ -181,34 +187,22 @@ async function probePhoto(url) {
     return value && value.byteLength > 1000;
   } catch (e) { return false; }
 }
-async function healPhotos() {
-  const st0 = await chrome.storage.local.get('running');
-  if (st0.running) { await log('Уже идёт сбор — дождись конца'); return; }
-  const cfg = await chrome.storage.local.get(['backend', 'key']);
-  const backend = (cfg.backend || '').replace(/\/$/, '');
-  const key = cfg.key || '';
-  if (!backend || !key) { await log('Нет backend/key — впиши в попапе'); return; }
-  await chrome.storage.local.set({ running: true });
-  await log('Чиню фото: забираю список…');
-  let items = [];
-  try {
-    const r = await fetch(backend + '/api/collector/status?dump=1');
-    const j = await r.json();
-    items = (((j && j.data) || {}).dump || []).filter((p) => p && p.id && p.img);
-  } catch (e) { await log('dump ERR ' + e.message); await chrome.storage.local.set({ running: false }); return; }
-  const groups = new Map();
+/* Общая чистка фото: группирует по vol, находит живой хост пробами,
+   переписывает img НА МЕСТЕ и возвращает минимальный список для пуша. */
+async function healList(items, say) {
   const parseImg = (img) => {
     const m = String(img).match(/basket-(\d+)\.(wb\.ru|wbbasket\.ru)\/vol(\d+)\/part(\d+)\/(\d+)\/(photos|images)\/(big|tm)\/(\d+)\.webp/);
     if (!m) return null;
     return { host: m[1], vol: m[3], part: m[4], nmId: m[5] };
   };
+  const groups = new Map();
   items.forEach((p) => {
     const q = parseImg(p.img);
     if (!q) return;
-    if (!groups.has(q.vol)) groups.set(q.vol, { host: q.host, sample: p, sampleQ: q, list: [] });
+    if (!groups.has(q.vol)) groups.set(q.vol, { host: q.host, sampleQ: q, list: [] });
     groups.get(q.vol).list.push({ p, q });
   });
-  await log('Товаров: ' + items.length + ', томов: ' + groups.size);
+  if (say) await say('Томов: ' + groups.size);
   const fixed = [];
   for (const [vol, g] of groups) {
     const cand = [];
@@ -225,13 +219,31 @@ async function healPhotos() {
     }
     if (win) {
       g.list.forEach(({ p, q }) => {
-        fixed.push({ id: p.id, title: p.title, price: p.price, img: `https://basket-${win.host}.${win.dom}/vol${vol}/part${q.part}/${q.nmId}/${win.path}/big/1.webp` });
+        const img = `https://basket-${win.host}.${win.dom}/vol${vol}/part${q.part}/${q.nmId}/${win.path}/big/1.webp`;
+        p.img = img;
+        fixed.push({ id: p.id, title: p.title, price: p.price, img });
       });
-      await log(`vol${vol}: хост ${win.host} (${g.list.length} шт)`);
-    } else {
-      await log(`vol${vol}: не нашёлся — пропускаю`);
-    }
+      if (say) await say(`vol${vol}: хост ${win.host} (${g.list.length} шт)`);
+    } else if (say) await say(`vol${vol}: не нашёлся — пропускаю`);
   }
+  return fixed;
+}
+async function healPhotos() {
+  const st0 = await chrome.storage.local.get('running');
+  if (st0.running) { await log('Уже идёт сбор — дождись конца'); return; }
+  const cfg = await chrome.storage.local.get(['backend', 'key']);
+  const backend = (cfg.backend || '').replace(/\/$/, '');
+  const key = cfg.key || '';
+  if (!backend || !key) { await log('Нет backend/key — впиши в попапе'); return; }
+  await chrome.storage.local.set({ running: true });
+  await log('Чиню фото: забираю список…');
+  let items = [];
+  try {
+    const r = await fetch(backend + '/api/collector/status?dump=1');
+    const j = await r.json();
+    items = (((j && j.data) || {}).dump || []).filter((p) => p && p.id && p.img);
+  } catch (e) { await log('dump ERR ' + e.message); await chrome.storage.local.set({ running: false }); return; }
+  const fixed = await healList(items, async (msg) => { await log(msg); });
   if (fixed.length) {
     try {
       const r = await fetch(backend + '/api/collector/push', {
