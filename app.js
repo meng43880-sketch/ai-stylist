@@ -598,7 +598,9 @@ function extLiveQuery(query) {
     const over = (v) => { if (!done) { done = true; if (to) clearTimeout(to); window.removeEventListener('message', h); resolve(v); } };
     function h(e) {
       if (!e || e.source !== window || !e.data || e.data.src !== 'sainvio-ext' || e.data.reqId !== reqId) return;
-      over(e.data.busy ? [] : (e.data.items || []));
+      const items = e.data.busy ? [] : (e.data.items || []);
+      if (items.length) { try { toast('Расширение: свежих ' + items.length); } catch (te) {} }
+      over(items);
     }
     to = setTimeout(() => over([]), 35000);
     window.addEventListener('message', h);
