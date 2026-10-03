@@ -13,12 +13,30 @@ const ITEM_TTL_MS = 7 * 24 * 3600 * 1000; // карточка живёт нед�
 const MAX_ITEMS = 5000; // накопительный потолок (~5-10 МБ JSON — норм)
 const FRESH_PUSH_MS = 24 * 3600 * 1000; // свежий прогон был в последние сутки
 function enabled() { return (process.env.COLLECTOR_ENABLED || '').toLowerCase() === 'true'; }
+/* Ленивый доступ к store: файл — быстрый путь, PG-кеш — неубиваемый
+   (переживает редеплои; без DATABASE_URL store работает в JSON-режиме). */
+function db() { try { return require('./store'); } catch { return null; } }
 function read() {
   try {
     const j = JSON.parse(fs.readFileSync(FILE, 'utf8'));
-    if (j && Array.isArray(j.items)) return j;
+    if (j && Array.isArray(j.items) && j.items.length) return j;
+  } catch {}
+  try {
+    const S = db();
+    if (S) {
+      const hit = S.getCache('homefeed', 'items', 30 * 24 * 3600 * 1000);
+      if (hit && Array.isArray(hit.items) && hit.items.length) return { items: hit.items, ts: hit.ts || 0 };
+    }
   } catch {}
   return { items: [], ts: 0 };
+}
+function persist(items, ts) {
+  try { fs.mkdirSync(path.dirname(FILE), { recursive: true }); } catch {}
+  try { fs.writeFileSync(FILE, JSON.stringify({ ts, items })); } catch {}
+  try {
+    const S = db();
+    if (S) S.setCache('homefeed', 'items', { items, ts });
+  } catch {}
 }
 function getItems() {
   if (!enabled()) return [];
@@ -79,8 +97,7 @@ function setItems(items) {
   let out = [...byId.values()].filter((p) => (now - (p.fetchedAt || 0)) <= ITEM_TTL_MS);
   out.sort((a, b) => (b.fetchedAt || 0) - (a.fetchedAt || 0));
   out = out.slice(0, MAX_ITEMS);
-  try { fs.mkdirSync(path.dirname(FILE), { recursive: true }); } catch {}
-  fs.writeFileSync(FILE, JSON.stringify({ ts: now, items: out }));
+  persist(out, now);
   return { accepted: fresh, total: out.length, ts: now };
 }
 module.exports = { enabled, getItems, setItems, stats, MAX_ITEMS };
