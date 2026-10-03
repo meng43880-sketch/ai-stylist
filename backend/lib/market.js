@@ -19,9 +19,11 @@ function basketHost(vol) {
   for (const [max, h] of BASKET_RANGES) if (vol <= max) return h;
   return '33';
 }
+/* С 2024 у новых товаров домен wbbasket.ru + путь /images/ (старые: wb.ru + /photos/).
+   Каскад в app.js (__fb) добирает остальные комбинации при 404. */
 function wbPhoto(id) {
   const vol = Math.floor(id / 100000), part = Math.floor(id / 1000);
-  return `https://basket-${basketHost(vol)}.wb.ru/vol${vol}/part${part}/${id}/photos/big/1.webp`;
+  return `https://basket-${basketHost(vol)}.wbbasket.ru/vol${vol}/part${part}/${id}/images/big/1.webp`;
 }
 function wbUrl(id) { return `https://www.wildberries.ru/catalog/${id}/detail.aspx`; }
 const WB_COLORS = [['черн', 'black'], ['бел', 'white'], ['сер', 'gray'], ['беж', 'beige'], ['олив', 'olive'], ['хаки', 'olive'], ['зелен', 'green'], ['зелён', 'green'], ['син', 'blue'], ['голуб', 'blue'], ['коричн', 'brown'], ['бордо', 'brown']];

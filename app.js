@@ -8,7 +8,31 @@ const $ = (s, r) => (r || document).querySelector(s);
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fmt = (n) => Number(n).toLocaleString('ru-RU') + ' ₽';
 const FALLBACK = 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=800&q=80';
-window.__fb = function (el) { el.onerror = null; el.src = FALLBACK; };
+/* Каскад фото WB: у новых товаров домен wbbasket.ru + путь /images/,
+   у старых wb.ru + /photos/ — таблица дрейфует, поэтому при 404 перебираем
+   комбинации того же хоста (макс. 3 попытки), и только потом заглушка. */
+window.__fb = function (el) {
+  try {
+    const src = String(el.src || '');
+    const m = src.match(/https:\/\/basket-(\d+)\.(wb\.ru|wbbasket\.ru)\/vol(\d+)\/part(\d+)\/(\d+)\/(photos|images)\/(big|tm)\/(\d+)\.webp/);
+    const n = parseInt(el.dataset.fbn || '0', 10);
+    if (m && n < 3) {
+      const [, host, , vol, part, id, , size, num] = m;
+      const combos = [
+        `https://basket-${host}.wbbasket.ru/vol${vol}/part${part}/${id}/images/${size}/${num}.webp`,
+        `https://basket-${host}.wb.ru/vol${vol}/part${part}/${id}/photos/${size}/${num}.webp`,
+        `https://basket-${host}.wbbasket.ru/vol${vol}/part${part}/${id}/photos/${size}/${num}.webp`,
+        `https://basket-${host}.wb.ru/vol${vol}/part${part}/${id}/images/${size}/${num}.webp`
+      ].filter((u) => u !== src);
+      if (n < combos.length) {
+        el.dataset.fbn = String(n + 1);
+        el.src = combos[n];
+        return;
+      }
+    }
+  } catch (e) {}
+  el.onerror = null; el.src = FALLBACK;
+};
 const IM = (src, alt) => `<img src="${src}" alt="${esc(alt || '')}" loading="lazy" onerror="__fb(this)">`;
 function toast(t) {
   const d = document.createElement('div'); d.className = 'toastmsg'; d.textContent = t;

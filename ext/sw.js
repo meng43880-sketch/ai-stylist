@@ -27,7 +27,7 @@ const BASKET = [[143, '01'], [287, '02'], [431, '03'], [575, '04'], [719, '05'],
 function basketHost(vol) { for (const [m, h] of BASKET) if (vol <= m) return h; return '33'; }
 function wbPhoto(id) {
   const vol = Math.floor(id / 100000), part = Math.floor(id / 1000);
-  return `https://basket-${basketHost(vol)}.wb.ru/vol${vol}/part${part}/${id}/photos/big/1.webp`;
+  return `https://basket-${basketHost(vol)}.wbbasket.ru/vol${vol}/part${part}/${id}/images/big/1.webp`;
 }
 const CATS = [['худи', 'top'], ['толстов', 'top'], ['футбол', 'top'], ['рубаш', 'top'], ['куртк', 'top'], ['пальто', 'top'], ['бомбер', 'top'], ['свитшот', 'top'], ['лонгслив', 'top'], ['свитер', 'top'], ['джемпер', 'top'], ['брюк', 'bottom'], ['джинс', 'bottom'], ['чинос', 'bottom'], ['карго', 'bottom'], ['юбк', 'bottom'], ['кроссов', 'shoes'], ['кед', 'shoes'], ['ботин', 'shoes'], ['челси', 'shoes'], ['туфл', 'shoes'], ['рюкзак', 'acc'], ['сумк', 'acc'], ['часы', 'acc'], ['кепк', 'acc'], ['очк', 'acc'], ['шапк', 'acc'], ['ремен', 'acc']];
 function wbCat(name) {
