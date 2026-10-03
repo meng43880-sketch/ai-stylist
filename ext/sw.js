@@ -228,7 +228,8 @@ async function healList(items, say) {
     cand.push([g.host, 'wbbasket.ru', 'images'], [g.host, 'wb.ru', 'photos']);
     for (let h = 1; h <= 33; h++) {
       const hh = String(h).padStart(2, '0');
-      if (hh !== g.host && (!known || hh !== known.host)) cand.push([hh, 'wbbasket.ru', 'images']);
+      if (hh === g.host || (known && hh === known.host)) continue;
+      cand.push([hh, 'wbbasket.ru', 'images'], [hh, 'wb.ru', 'photos']);
     }
     let win = null;
     for (const [hh, dom, path] of cand) {
