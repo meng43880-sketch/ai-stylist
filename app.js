@@ -846,6 +846,25 @@ window.feedFromResult = function () {
 };
 
 /* ---------- product ---------- */
+/* Галерея карточки: первое фото — сразу (его и чиним/кажем в ленте),
+   остальные 2..6 — лениво и только здесь. Несуществующих номеров нет:
+   битые тихо исчезают. Клик по миниатюре меняет главное фото. */
+function galMain(p) {
+  return `<img class="gmain" src="${esc(p.img)}" alt="${esc(p.title || '')}" onerror="__fb(this)">`;
+}
+function galThumbs(p) {
+  const m = String(p.img || '').match(/^(https:\/\/basket-\d+\.(?:wb\.ru|wbbasket\.ru)\/vol\d+\/part\d+\/\d+\/(?:photos|images)\/(?:big|tm)\/)\d+(\.webp.*)$/);
+  if (!m) return '';
+  let out = '';
+  for (let i = 2; i <= 6; i++) out += `<img src="${m[1]}${i}${m[2]}" alt="" loading="lazy" onclick="galSwap(this)" onerror="this.remove()">`;
+  return `<div class="gthumbs">${out}</div>`;
+}
+window.galSwap = function (el) {
+  const gal = el.closest('.gal');
+  const main = gal && gal.querySelector('img.gmain');
+  if (!main) return;
+  const t = main.src; main.onerror = () => __fb(main); main.src = el.src; el.src = t;
+};
 function vProduct(id) {
   return `<div class="wrap"><div id="pbody"><div class="empty"><p class="small">Загружаем…</p></div></div></div>`;
 }
@@ -884,8 +903,8 @@ function renderDemoProduct(p, rv, id) {
     const el = document.getElementById('pbody');
     if (!el || S.route !== 'product') return;
     el.innerHTML = `
-      <div class="gal" style="margin:14px -20px 0;position:relative">${IM(p.img, p.title)}
-        <button class="iconbtn l" style="position:absolute;top:14px;left:14px" onclick="go('home')" aria-label="Назад">${ic('back', 19)}</button></div>
+      <div class="gal" style="margin:14px -20px 0;position:relative">${galMain(p)}
+        <button class="iconbtn l" style="position:absolute;top:14px;left:14px" onclick="go('home')" aria-label="Назад">${ic('back', 19)}</button>${galThumbs(p)}</div>
       <div class="row" style="margin-top:14px"><div class="grow"><span class="small muted">${p.mp === 'WB' ? 'Wildberries' : 'Ozon'} · ${ic('star', 12)} ${p.rating}</span></div>
       <button class="iconbtn favbtn ${fav ? 'on' : ''}" onclick="fav('${p.id}')" aria-label="В избранное" style="${fav ? 'color:#E11D48' : ''}">${ic('heart', 19)}</button>
       <button class="iconbtn" onclick="shareProduct('${p.id}')" aria-label="Поделиться" style="margin-left:8px">${ic('share', 18)}</button></div>
@@ -917,8 +936,8 @@ function renderLiveProduct(p) {
     ['Рейтинг', an.quality, p.reviews ? `На WB: ${p.rating} · ${Number(p.reviews).toLocaleString('ru-RU')} оценок.` : 'Рейтинг WB.']
   ];
   el.innerHTML = `
-    <div class="gal" style="margin:14px -20px 0;position:relative">${IM(p.img, p.title)}
-      <button class="iconbtn l" style="position:absolute;top:14px;left:14px" onclick="go('home')" aria-label="Назад">${ic('back', 19)}</button></div>
+    <div class="gal" style="margin:14px -20px 0;position:relative">${galMain(p)}
+      <button class="iconbtn l" style="position:absolute;top:14px;left:14px" onclick="go('home')" aria-label="Назад">${ic('back', 19)}</button>${galThumbs(p)}</div>
     <div class="row" style="margin-top:14px"><div class="grow"><span class="livelabel"><span class="livedot"></span>Live · Wildberries</span></div>
     <button class="iconbtn ${fav ? 'on' : ''}" onclick="fav('${p.id}')" aria-label="В избранное" style="${fav ? 'color:#E11D48' : ''}">${ic('heart', 19)}</button></div>
     <h1 style="font-size:21px;margin-top:6px">${esc(p.title)}</h1>
