@@ -106,7 +106,7 @@ function reviewsFromLd() {
             if (!r) return;
             const text = String(r.reviewBody || r.text || '').replace(/\s+/g, ' ').trim();
             let rating = 0;
-            try { rating = parseInt(((r.reviewRating || {}).ratingValue) || 0; } catch (e) {}
+            try { rating = parseInt(((r.reviewRating || {}).ratingValue) || 0, 10) || 0; } catch (e) {}
             if (text.length >= 15) out.push({ text: text.slice(0, 500), rating });
           });
         });
