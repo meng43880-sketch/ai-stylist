@@ -3,6 +3,12 @@ backend/.env
 .env
 *.key
 *.pem
+# ферма: реальные конфиги с серверами (только TEMPLATE в git)
+farm/xray-1.json
+farm/xray-2.json
+farm/xray-3.json
+farm/xray-4.json
+farm/xray-5.json
 
 # локальная база backend (профили, кеш, usage)
 backend/data/

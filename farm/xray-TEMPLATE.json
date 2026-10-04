@@ -1,0 +1,38 @@
+{
+  "_comment": "ШАБЛОН фермы sainvio. Скопируй как xray-1.json … xray-5.json, в каждом впиши СВОЙ сервер. НИКОГДА не коммить файлы с реальными ссылками (они в .gitignore).",
+  "_howto": "Из своей vless://ссылки возьми: UUID (между vless:// и @), SERVER (между @ и :), PORT, а из ?параметров: sni, pbk (publicKey), sid (shortId), fp (fingerprint, обычно chrome), flow (обычно xtls-rprx-vision). Пример ссылки: vless://UUID@SERVER:PORT?security=reality&sni=SNI&fp=chrome&pbk=KEY&sid=SID&flow=xtls-rprx-vision#имя",
+  "log": { "loglevel": "warning" },
+  "inbounds": [
+    {
+      "_comment": "МЕНЯЙ ПОРТ: 20801 для xray-1, 20802 для xray-2, … 20805 для xray-5",
+      "port": 20801,
+      "protocol": "socks",
+      "settings": { "udp": true }
+    }
+  ],
+  "outbounds": [
+    {
+      "protocol": "vless",
+      "settings": {
+        "vnext": [
+          {
+            "address": "SERVER",
+            "port": 443,
+            "users": [{ "id": "UUID", "encryption": "none", "flow": "xtls-rprx-vision" }]
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "tcp",
+        "security": "reality",
+        "realitySettings": {
+          "serverName": "SNI",
+          "fingerprint": "chrome",
+          "publicKey": "PBK",
+          "shortId": "SID",
+          "show": false
+        }
+      }
+    }
+  ]
+}
