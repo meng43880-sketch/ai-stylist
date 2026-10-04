@@ -637,6 +637,17 @@ function outfitCard(o) {
 }
 function scrollMsgs() { setTimeout(() => { const m = $('#msgs'); if (m) m.scrollTop = m.scrollHeight; }, 80); }
 
+/* Пол в живой запрос: «футболка» → «футболка мужская», иначе WB сыплет
+   мужское/женское/детское вперемешку. Сервер делает то же самое — идемпотентно. */
+function genderQ(q) {
+  const t = String(q || '').trim();
+  if (!t || /мужск|женск/i.test(t)) return t;
+  const g = (S.profile && (S.profile.gender === 'male' || S.profile.gender === 'female')) ? S.profile.gender : '';
+  if (!g) return t;
+  const pl = ['джинсы', 'брюки', 'кроссовки', 'кеды', 'ботинки', 'шорты', 'носки'].some((w) => t.toLowerCase().split(/\s+/)[0].includes(w));
+  const adj = g === 'male' ? (pl ? 'мужские' : 'мужская') : (pl ? 'женские' : 'женская');
+  return `${t} ${adj}`;
+}
 /* Расширение-человек: печатает запрос в WB (~10-15с) и отдаёт до 30 свежих.
    Нет расширения — тихий [] по таймауту. */
 window.__extBridge = false; window.__extHintShown = false;
@@ -715,7 +726,7 @@ async function askAI(text, img) {
   if (!Api.ok && img) { toast('Фото ищет только онлайн с подключённым AI'); return; }
   __asking = true;
   /* Свежая полоса стартует ПАРАЛЛЕЛЬНО серверу: пока AI думает, расширение печатает запрос в WB. */
-  const extP = extLiveQuery(text);
+  const extP = extLiveQuery(genderQ(text));
   /* Телефон без расширения: заказ живья через сервер-реле (домашнее расширение
      подберёт по минутному тику). С расширением не дублируем — прямой мост быстрее. */
   let relayQid = null;
@@ -754,7 +765,7 @@ async function askAI(text, img) {
     /* Живьём с WB: прямой запрос из браузера + скоринг тем же движком.
        Для фото используем suggestQuery от вижена, а не текст кнопки. */
     try {
-      const raw = await WBClient.searchText(d.suggestQuery || text, 50);
+      const raw = await WBClient.searchText(genderQ(d.suggestQuery || text), 50);
       if (raw.length) {
         const s = await Api.post('/api/market/score', { items: raw, struct: {} });
         (s.items || []).forEach((p) => { RC[p.id] = p; });
@@ -818,7 +829,7 @@ async function askAI(text, img) {
       /* На статике живьё с WB тоже работает (CORS открыт) — score считаем
          локально тем же движком, метка Live сохраняется. */
       try {
-        const raw = await WBClient.searchText(text, 50);
+        const raw = await WBClient.searchText(genderQ(text), 50);
         const fb = demoFb();
         const scored = [];
         raw.forEach((p) => { try { const r = Demo.score(p, S.profile, fb); scored.push(Object.assign({}, p, { aiScore: r.score, aiParts: r.parts })); } catch (se) {} });

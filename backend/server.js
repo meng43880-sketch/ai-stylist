@@ -353,7 +353,8 @@ async function route(req, res) {
         return send(res, 403, { ok: false, code: 'AUTH', error: 'Нет доступа' });
       if (m === 'POST' && p === '/api/live/request') {
         const b = await readBody(req);
-        const query = String(b.query || '').slice(0, 60).trim();
+        const gdr = (U.profile && (U.profile.gender === 'male' || U.profile.gender === 'female')) ? U.profile.gender : '';
+        const query = M.withGender(String(b.query || '').slice(0, 60).trim(), gdr);
         if (!query) return send(res, 400, { ok: false, error: 'Пустой запрос' });
         for (const [k, v] of liveQ) {
           if (v.uid === uid && v.status === 'pending')

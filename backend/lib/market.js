@@ -116,15 +116,33 @@ async function wbSearchServer(query, limit, page) {
 }
 /* Веер запросов из структуры: категории по отдельности + цвет.
    Даёт широкое покрытие вместо одного узкого запроса. */
+/* Прилагательное пола под слово (род/число). Поиск у WB токенный,
+   поэтому «футболка мужская» работает не хуже «мужская футболка». */
+const PLURAL = ['джинсы', 'брюки', 'кроссовки', 'кеды', 'ботинки', 'шорты', 'носки', 'колготки', 'трусы', 'весы'];
+function genderAdj(gender, word) {
+  if (gender !== 'male' && gender !== 'female') return '';
+  const pl = PLURAL.some((w) => String(word || '').toLowerCase().includes(w));
+  if (gender === 'male') return pl ? 'мужские' : 'мужская';
+  return pl ? 'женские' : 'женская';
+}
+/* Добивка пола к свободному запросу: «футболка» → «футболка мужская». */
+function withGender(query, gender) {
+  const q = String(query || '').trim();
+  if (!q || (gender !== 'male' && gender !== 'female')) return q;
+  if (/мужск|женск/i.test(q)) return q;
+  const first = q.split(/\s+/)[0] || '';
+  const adj = genderAdj(gender, first);
+  return adj ? `${q} ${adj}` : q;
+}
 function structToQueries(st) {
   const s = st || {};
   const cmap = { black: 'черный', white: 'белый', olive: 'оливковый', beige: 'бежевый', gray: 'серый', green: 'зеленый', blue: 'синий', brown: 'коричневый' };
   const catWords = { top: ['футболка', 'худи', 'куртка'], bottom: ['брюки', 'джинсы'], shoes: ['кроссовки', 'кеды'], acc: ['аксессуар'] };
   const words = catWords[s.category] || ['одежда'];
   const color = cmap[s.color] ? ' ' + cmap[s.color] : '';
-  const queries = words.slice(0, 3).map((w) => (w + color).trim());
-  if (s.style === 'sport') queries.push('спортивная одежда' + color);
-  if (s.style === 'business') queries.push('деловой костюм рубашка' + color);
+  const queries = words.slice(0, 3).map((w) => withGender(w + color, s.gender).trim());
+  if (s.style === 'sport') queries.push(withGender('спортивная одежда' + color, s.gender));
+  if (s.style === 'business') queries.push(withGender('деловой костюм рубашка' + color, s.gender));
   return [...new Set(queries)].slice(0, 3);
 }
 function dedupeLive(items) {
@@ -497,4 +515,4 @@ class MarketplaceService {
   }
 }
 
-module.exports = { wbSearchServer, wbFetch, funnelSearch, dedupeLive, ozonSearchServer, normalizeWbItem, scoreLive, structToQuery, structToQueries, wbPhoto, wbUrl, affLink, toModel, takprodamGet, normalizeTakprodam, CatalogProvider, DemoCatalogProvider, WbPublicCatalogProvider, OzonCatalogProvider, TakprodamCatalogProvider, MarketplaceProvider, WildberriesProvider, OzonProvider, DemoMarketplaceProvider, TakprodamProvider, MarketplaceService };
+module.exports = { wbSearchServer, wbFetch, funnelSearch, dedupeLive, ozonSearchServer, normalizeWbItem, scoreLive, structToQuery, structToQueries, withGender, genderAdj, wbPhoto, wbUrl, affLink, toModel, takprodamGet, normalizeTakprodam, CatalogProvider, DemoCatalogProvider, WbPublicCatalogProvider, OzonCatalogProvider, TakprodamCatalogProvider, MarketplaceProvider, WildberriesProvider, OzonProvider, DemoMarketplaceProvider, TakprodamProvider, MarketplaceService };

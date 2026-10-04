@@ -336,8 +336,9 @@ async function searchPipeline({ struct, text, profile, feedback, limit, wardrobe
   // откатываемся на остальное — чат не должен висеть.
   if (CFG.dataSource === 'hybrid') {
     try {
-      const base = (text && text.trim()) ? [text.trim()] : [];
-      const vars = M.structToQueries(struct || {});
+      const gdr = (profile && (profile.gender === 'male' || profile.gender === 'female')) ? profile.gender : '';
+      const base = (text && text.trim()) ? [M.withGender(text.trim(), gdr)] : [];
+      const vars = M.structToQueries(Object.assign({}, struct || {}, { gender: gdr }));
       const queries = base.concat(vars.filter((qq) => !base.includes(qq))).slice(0, 3);
       const wait = (ms) => new Promise((res) => setTimeout(() => res([]), ms));
       const live = await Promise.race([M.funnelSearch(queries, 25, 2), wait(12000)]);

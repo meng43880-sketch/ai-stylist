@@ -130,6 +130,16 @@ const demoTee = (id, styles, colors, fit) => ({
     const r3 = CX.applyRelax(it, ['budget']);
     ok(r3.hard.maxPrice === 3750, 'R budget x1.25');
   }
+  /* Пол в живой запрос: мужское/женское/детское не вперемешку. */
+  {
+    const M = require('../lib/market');
+    ok(M.withGender('футболка', 'male') === 'футболка мужская', 'GQ male');
+    ok(M.withGender('джинсы', 'female') === 'джинсы женские', 'GQ female plural');
+    ok(M.withGender('футболка мужская', 'female') === 'футболка мужская', 'GQ idempotent');
+    ok(M.withGender('футболка', '') === 'футболка', 'GQ no gender');
+    const qs = M.structToQueries({ category: 'top', color: 'black', gender: 'male' });
+    ok(qs.length === 3 && /мужск/.test(qs[0]), 'GQ funnel gendered', JSON.stringify(qs));
+  }
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error('FATAL', e); process.exit(1); });
