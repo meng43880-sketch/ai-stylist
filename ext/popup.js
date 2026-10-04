@@ -1,6 +1,7 @@
 'use strict';
 const $ = (id) => document.getElementById(id);
 (async () => {
+  try { $('ver').textContent = 'v' + chrome.runtime.getManifest().version; } catch (e) {}
   const cfg = await chrome.storage.local.get(['backend', 'key', 'set']);
   if (cfg.backend) $('backend').value = cfg.backend;
   if (cfg.key) $('key').value = cfg.key;
