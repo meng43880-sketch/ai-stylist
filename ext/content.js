@@ -134,6 +134,7 @@ function ratingNear(el) {
   return 0;
 }
 async function scrapeReviews() {
+  const debug = { title: String(document.title || '').slice(0, 80), tabClicked: false };
   const ld = reviewsFromLd().slice(0, 30);
   if (ld.length >= 5) return { reviews: ld, via: 'ld', debug };
   const pick = (sels) => {
@@ -142,7 +143,6 @@ async function scrapeReviews() {
     }
     return { els: [], sel: '' };
   };
-  const debug = { title: String(document.title || '').slice(0, 80), tabClicked: false };
   try {
     const tab = [...document.querySelectorAll('button,a,[role="tab"]')].find((b) => (
       /отзыв/i.test((b.textContent || '').slice(0, 40)) && !/показать|все/i.test((b.textContent || '').slice(0, 40))
@@ -153,15 +153,6 @@ async function scrapeReviews() {
     const head = [...document.querySelectorAll('h1,h2,h3')].find((h) => /отзыв/i.test(h.textContent || ''));
     if (head) { head.scrollIntoView({ block: 'start' }); await HSLEEP(1500); }
   } catch (e) {}
-  /* Кнопка «показать ещё» — догружаем ленту отзывов. */
-  try {
-    const more = [...document.querySelectorAll('button,a')].find((b) => /показать.*отзыв|все.*отзыв|ещё.*\d+|загрузить/i.test((b.textContent || '').slice(0, 60)));
-    if (more) { more.click(); await HSLEEP(2000); }
-  } catch (e) {}
-  for (let i = 0; i < 5; i++) {
-    try { window.scrollBy(0, 1000); } catch (e) {}
-    await HSLEEP(1100);
-  }
   const out = [], seen = new Set();
   const push = (t, el) => {
     t = String(t || '').replace(/\s+/g, ' ').trim();
@@ -169,20 +160,36 @@ async function scrapeReviews() {
     seen.add(t.slice(0, 60));
     out.push({ text: t.slice(0, 500), rating: el ? ratingNear(el) : 0 });
   };
-  const found = pick(['.comment__text', '.feedback__text', '.feedback__content', '[data-testid="feedback-text"]', '.comments-list__text', '.comment-text', '.review-text']);
-  if (found.els.length) {
-    found.els.slice(0, 60).forEach((el) => push(el.innerText || el.textContent, el));
-    if (out.length) return { reviews: out.slice(0, 30), via: 'dom:' + found.sel, debug };
+  const collectOnce = () => {
+    const found = pick(['.comment__text', '.feedback__text', '.feedback__content', '[data-testid="feedback-text"]', '.comments-list__text', '.comment-text', '.review-text']);
+    if (found.els.length) {
+      found.els.slice(0, 80).forEach((el) => push(el.innerText || el.textContent, el));
+      if (out.length >= 5) return 'dom:' + found.sel;
+    }
+    try {
+      const all = [...document.querySelectorAll('[class]')].filter((el) => {
+        const c = String(el.getAttribute('class') || '');
+        return /comment|feedback|review|opinion|otzyv/i.test(c) && !/list|container|wrapper|section|block|wrap/i.test(c);
+      });
+      all.slice(0, 100).forEach((el) => push(el.innerText || el.textContent, el));
+      if (out.length >= 5) return 'generic';
+    } catch (e) {}
+    return '';
+  };
+  /* Догрузка циклами: кнопка «ещё» + скролл, пока растёт (макс. 3 круга). */
+  let via = collectOnce();
+  for (let round = 0; round < 3 && out.length < 30 && !via; round++) {
+    try {
+      const more = [...document.querySelectorAll('button,a')].find((b) => /показать.*отзыв|все.*отзыв|ещё.*\d+|загрузить|показать ещё/i.test((b.textContent || '').slice(0, 60)));
+      if (more) { more.click(); await HSLEEP(2000); }
+    } catch (e) {}
+    for (let i = 0; i < 4; i++) {
+      try { window.scrollBy(0, 1000); } catch (e) {}
+      await HSLEEP(1000);
+    }
+    via = collectOnce();
   }
-  /* Generic: любой блок с классом про отзывы/комменты. */
-  try {
-    const all = [...document.querySelectorAll('[class]')].filter((el) => {
-      const c = String(el.getAttribute('class') || '');
-      return /comment|feedback|review|opinion|otzyv/i.test(c) && !/list|container|wrapper|section|block|wrap/i.test(c);
-    });
-    all.slice(0, 80).forEach((el) => push(el.innerText || el.textContent, el));
-    if (out.length) return { reviews: out.slice(0, 30), via: 'generic', debug };
-  } catch (e) {}
+  if (out.length) return { reviews: out.slice(0, 30), via: via || 'generic', debug };
   if (ld.length) return { reviews: ld, via: 'ld-few', debug };
   let bodyHas = false, candCount = 0;
   try {
