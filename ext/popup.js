@@ -16,6 +16,7 @@ const $ = (id) => document.getElementById(id);
   };
   await draw();
   setInterval(draw, 2000);
+  try { chrome.runtime.sendMessage({ type: 'pollRelay' }); } catch (e) {}
   $('go').onclick = async () => {
     await chrome.storage.local.set({ backend: $('backend').value.trim(), key: $('key').value.trim(), set: $('set').value, log: [] });
     chrome.runtime.sendMessage({ type: 'collect' });

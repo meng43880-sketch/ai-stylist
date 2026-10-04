@@ -39,6 +39,20 @@ function send(res, code, obj) {
   res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Length': Buffer.byteLength(body) });
   res.end(body);
 }
+/* gzip для тяжёлых ответов (ленты, скоринг): штатный zlib, без зависимостей.
+   Маленькое и без gzip у клиента — как раньше. */
+const zlib = require('zlib');
+function sendGz(res, req, code, obj) {
+  let body;
+  try { body = Buffer.from(JSON.stringify(obj)); } catch (e) { return send(res, code, obj); }
+  const ae = String((req && req.headers && req.headers['accept-encoding']) || '');
+  if (body.length < 2048 || !ae.includes('gzip')) return send(res, code, obj);
+  zlib.gzip(body, (err, gz) => {
+    if (err || !gz || gz.length >= body.length) return send(res, code, obj);
+    res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Encoding': 'gzip', 'Content-Length': gz.length });
+    res.end(gz);
+  });
+}
 function readBody(req) {
   return new Promise((resolve, reject) => {
     let n = 0; const chunks = [];
@@ -177,7 +191,7 @@ async function route(req, res) {
       save();
       const key = JSON.stringify(struct);
       require('./lib/store').setCache('recs', key, { items: pipe.items.map((x) => x.id), ts: Date.now() });
-      return send(res, 200, { ok: true, total: pipe.total, items: pipe.items, source: pipe.source, intent: intent.message, relaxed: pipe.relaxed });
+      return sendGz(res, req, 200, { ok: true, total: pipe.total, items: pipe.items, source: pipe.source, intent: intent.message, relaxed: pipe.relaxed });
     }
     /* --- outfits --- */
     if (m === 'POST' && p === '/api/outfits') {
@@ -190,7 +204,7 @@ async function route(req, res) {
       }));
       EV.logRec(U, 'outfits', outs.flatMap((o) => o.items.map((x) => x.id || x)));
       save();
-      return send(res, 200, { ok: true, outfits: outs });
+      return sendGz(res, req, 200, { ok: true, outfits: outs });
     }
     /* --- products --- */
     const pm = p.match(/^\/api\/products\/([a-z0-9]+)(\/reviews|\/analysis|\/explanation|\/availability)?$/i);
@@ -235,7 +249,7 @@ async function route(req, res) {
     if (m === 'POST' && p === '/api/ai/chat') {
       const b = await readBody(req);
       const out = await O.chat({ message: b.message, conversationId: b.conversationId, profile: profile(U), feedback: feedback(U), uid, wardrobe: U.wardrobe, image: b.image || null });
-      return send(res, 200, { ok: true, data: out });
+      return sendGz(res, req, 200, { ok: true, data: out });
     }
     /* --- feedback / favorites / history --- */
     if (m === 'POST' && p === '/api/feedback') {
@@ -290,7 +304,7 @@ async function route(req, res) {
       const items = Array.isArray(b.items) ? b.items.slice(0, 100) : [];
       const struct = b.struct || {};
       const scored = M.scoreLive(items, O.scoreCtx(profile(U), feedback(U), { occasion: struct.occasion, wardrobe: U.wardrobe, taste: U.taste, favorites: U.favorites }));
-      return send(res, 200, { ok: true, items: scored });
+      return sendGz(res, req, 200, { ok: true, items: scored });
     }
     /* --- collector: домашний мост каталога. Авторизация — секретом
        x-collector-key (не user-токеном), рубильник — COLLECTOR_ENABLED. --- */

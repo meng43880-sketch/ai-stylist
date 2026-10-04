@@ -9,7 +9,7 @@ services:
       - key: NODE_ENV
         value: production
       - key: DATA_SOURCE
-        value: hybrid
+        value: demo
       - key: ZVENO_BASE_URL
         value: https://api.zveno.ai/v1
       - key: ZVENO_MODEL

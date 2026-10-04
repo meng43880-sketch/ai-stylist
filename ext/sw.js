@@ -290,8 +290,9 @@ async function healPhotos() {
   await chrome.storage.local.set({ running: false, lastRun: Date.now(), lastCount: fixed.length });
 }
 chrome.runtime.onMessage.addListener((m, sender, sendResponse) => {
-  if (m && m.type === 'collect') { runCollect(); return; }
+  if (m && m.type === 'collect') { runCollect().finally(() => pollRelay()); return; }
   if (m && m.type === 'heal') { healPhotos(); return; }
+  if (m && m.type === 'pollRelay') { pollRelay(); return; }
   if (m && m.type === 'liveQuery') {
     runLiveQuery(m.query || '').then(sendResponse);
     return true;
@@ -328,10 +329,12 @@ chrome.alarms.onAlarm.addListener((a) => {
   if (a.name === 'relay') pollRelay();
 });
 /* onInstalled не стреляет при ручной перезагрузке unpacked — будильники
-   создаём защитно при каждом старте воркера (если их нет). */
+   создаём защитно при каждом старте воркера (если их нет).
+   Плюс мгновенный опрос очереди при старте: заказ с телефона не ждёт тика. */
 try {
   chrome.alarms.get('hf', (a) => { if (!a) chrome.alarms.create('hf', { periodInMinutes: 360 }); });
   chrome.alarms.get('relay', (a) => { if (!a) chrome.alarms.create('relay', { periodInMinutes: 1 }); });
+  pollRelay();
 } catch (e) {}
 chrome.runtime.onInstalled.addListener(() => {
   chrome.alarms.create('hf', { periodInMinutes: 360 });
