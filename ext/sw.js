@@ -326,11 +326,21 @@ async function openProduct(nmId) {
     if (!reviews.length) return;
     const cfg = await chrome.storage.local.get(['backend', 'key']);
     if (!cfg.backend || !cfg.key) return;
-    await fetch(cfg.backend.replace(/\/$/, '') + '/api/collector/reviews', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-collector-key': cfg.key },
-      body: JSON.stringify({ productId: 'wb' + id, nmId: id, reviews })
-    }).catch(() => {});
+    try {
+      const r = await fetch(cfg.backend.replace(/\/$/, '') + '/api/collector/reviews', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-collector-key': cfg.key },
+        body: JSON.stringify({ productId: 'wb' + id, nmId: id, reviews })
+      });
+      await log('push отзывов -> HTTP ' + r.status);
+    } catch (e) { await log('push отзывов ERR ' + e.message); return; }
+    /* Толкаем открытые вкладки приложения: страница сразу допросит комментарий. */
+    try {
+      const tabs = await chrome.tabs.query({});
+      for (const t of tabs) {
+        try { await chrome.tabs.sendMessage(t.id, { type: 'reviewsReady', productId: 'wb' + id }); } catch (e) {}
+      }
+    } catch (e) {}
   } catch (e) { await log('openProduct ERR ' + e.message); }
 }
 async function closeProduct() {

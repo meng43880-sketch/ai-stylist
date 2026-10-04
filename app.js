@@ -654,7 +654,12 @@ function genderQ(q) {
    Нет расширения — тихий [] по таймауту. */
 window.__extBridge = false; window.__extHintShown = false;
 window.addEventListener('message', (e) => {
-  if (e && e.source === window && e.data && e.data.src === 'sainvio-ext' && e.data.hello) window.__extBridge = true;
+  if (!e || e.source !== window || !e.data || e.data.src !== 'sainvio-ext') return;
+  if (e.data.hello) { window.__extBridge = true; return; }
+  /* Расширение: отзывы готовы — допрашиваем комментарий сразу, не ждём таймеров. */
+  if (e.data.reviewsReady && e.data.productId && S.route === 'product' && S.params && S.params.id === e.data.productId) {
+    pollReviewComment(e.data.productId);
+  }
 });
 function extLiveQuery(query) {
   if (!window.__extBridge) {

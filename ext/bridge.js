@@ -6,6 +6,14 @@
 /* Маяк для страницы: «мост на месте». Страница показывает подсказку,
    только если маяка нет (а не ждёт 35с в пустоту). */
 try { window.postMessage({ src: 'sainvio-ext', hello: true }, '*'); } catch (e) {}
+/* Обратный канал: расширение толкает страницу (отзывы готовы). */
+try {
+  chrome.runtime.onMessage.addListener((msg) => {
+    if (msg && msg.type === 'reviewsReady') {
+      try { window.postMessage({ src: 'sainvio-ext', reviewsReady: true, productId: String(msg.productId || '') }, '*'); } catch (e) {}
+    }
+  });
+} catch (e) {}
 window.addEventListener('message', (e) => {
   if (e.source !== window || !e.data || e.data.src !== 'sainvio-web') return;
   if (e.data.want === 'openProduct' || e.data.want === 'closeProduct') {
