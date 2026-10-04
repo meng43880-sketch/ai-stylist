@@ -314,12 +314,12 @@ async function openProduct(nmId) {
       await sleep(1000);
     }
     await sleep(2500); // дать карточке и отзывам отрисоваться
-    let reviews = [];
+    let reviews = [], via = '?';
     try {
       const res = await chrome.tabs.sendMessage(__productTab, { type: 'scrapeReviews' });
-      if (res && res.ok) reviews = (res.reviews || []).slice(0, 30);
+      if (res && res.ok) { reviews = (res.reviews || []).slice(0, 30); via = res.via || '?'; }
     } catch (e) {}
-    await log('карточка ' + id + ': отзывов ' + reviews.length);
+    await log('карточка ' + id + ': отзывов ' + reviews.length + ' (' + via + ')');
     if (!reviews.length) return;
     const cfg = await chrome.storage.local.get(['backend', 'key']);
     if (!cfg.backend || !cfg.key) return;

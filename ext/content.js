@@ -91,46 +91,99 @@ async function humanSearch(query, opts) {
   cards = findCards();
   return cards.slice(0, 30).map(readCard).filter(Boolean);
 }
-/* Отзывы карточки: скроллим к отзывам, собираем до 30 (текст+оценка).
-   Селекторы — веером с запасом: вёрстка WB дрейфует. */
+/* Отзывы карточки: 3 прохода — JSON-LD, точные селекторы, generic-скан.
+   Возвращает {reviews, via} — видно, каким путём нашло (для диагностики). */
+function reviewsFromLd() {
+  const out = [];
+  try {
+    document.querySelectorAll('script[type="application/ld+json"]').forEach((s) => {
+      try {
+        const j = JSON.parse(s.textContent || '');
+        const arr = Array.isArray(j) ? j : [j];
+        arr.forEach((o) => {
+          const rv = (o && o.review) || [];
+          (Array.isArray(rv) ? rv : [rv]).forEach((r) => {
+            if (!r) return;
+            const text = String(r.reviewBody || r.text || '').replace(/\s+/g, ' ').trim();
+            let rating = 0;
+            try { rating = parseInt(((r.reviewRating || {}).ratingValue) || 0; } catch (e) {}
+            if (text.length >= 15) out.push({ text: text.slice(0, 500), rating });
+          });
+        });
+      } catch (e) {}
+    });
+  } catch (e) {}
+  return out;
+}
+function ratingNear(el) {
+  try {
+    const scope = el.closest ? (el.closest('[class*="feedback"],[class*="comment"],[class*="review"],li,article,div') || el) : el;
+    const cand = [
+      scope.querySelector('.comment__rating'), scope.querySelector('.feedback__rating'),
+      scope.querySelector('[class*="star"]'), scope.querySelector('[aria-label*="ценк"]'),
+      scope.querySelector('[aria-label*="звезд"]')
+    ].filter(Boolean)[0];
+    if (cand) {
+      const m = String(cand.getAttribute('class') + ' ' + cand.getAttribute('aria-label') + ' ' + (cand.textContent || '')).match(/([1-5])/);
+      if (m) return +m[1];
+    }
+    const t = String((scope.innerText || scope.textContent || '')).slice(0, 300);
+    const m2 = t.match(/оценка\s*([1-5])/i);
+    if (m2) return +m2[1];
+  } catch (e) {}
+  return 0;
+}
 async function scrapeReviews() {
+  const ld = reviewsFromLd().slice(0, 30);
+  if (ld.length >= 5) return { reviews: ld, via: 'ld' };
   const pick = (sels) => {
     for (const s of sels) {
-      try { const els = [...document.querySelectorAll(s)]; if (els.length) return els; } catch (e) {}
+      try { const els = [...document.querySelectorAll(s)]; if (els.length) return { els, sel: s }; } catch (e) {}
     }
-    return [];
+    return { els: [], sel: '' };
   };
   try {
-    const head = [...document.querySelectorAll('h2,h3')].find((h) => /отзыв/i.test(h.textContent || ''));
+    const head = [...document.querySelectorAll('h1,h2,h3')].find((h) => /отзыв/i.test(h.textContent || ''));
     if (head) { head.scrollIntoView({ block: 'start' }); await HSLEEP(1500); }
   } catch (e) {}
-  for (let i = 0; i < 4; i++) {
-    try { window.scrollBy(0, 900); } catch (e) {}
-    await HSLEEP(1200);
+  /* Кнопка «показать ещё» — догружаем ленту отзывов. */
+  try {
+    const more = [...document.querySelectorAll('button,a')].find((b) => /показать.*отзыв|все.*отзыв|ещё.*\d+|загрузить/i.test((b.textContent || '').slice(0, 60)));
+    if (more) { more.click(); await HSLEEP(2000); }
+  } catch (e) {}
+  for (let i = 0; i < 5; i++) {
+    try { window.scrollBy(0, 1000); } catch (e) {}
+    await HSLEEP(1100);
   }
-  const texts = pick(['.comment__text', '.feedback__text', '.feedback__content', '[data-testid="feedback-text"]', '.comments-list__text', '.comment-text']);
   const out = [], seen = new Set();
-  const scope = texts.length ? texts : pick(['.comment', '.feedback', '.feedback__item', '.comments-list__item', '[data-card-index]']);
-  for (const el of scope.slice(0, 60)) {
-    const t = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
-    if (t.length < 15 || t.length > 1200 || seen.has(t.slice(0, 60))) continue;
+  const push = (t, el) => {
+    t = String(t || '').replace(/\s+/g, ' ').trim();
+    if (t.length < 15 || t.length > 1200 || seen.has(t.slice(0, 60))) return;
     seen.add(t.slice(0, 60));
-    let rating = 0;
-    const rs = el.querySelector ? (el.querySelector('.comment__rating') || el.querySelector('.feedback__rating') || el.querySelector('[class*="star"]')) : null;
-    if (rs) {
-      const m = String(rs.getAttribute('class') + ' ' + (rs.textContent || '')).match(/([1-5])/);
-      if (m) rating = +m[1];
-    }
-    out.push({ text: t.slice(0, 500), rating });
-    if (out.length >= 30) break;
+    out.push({ text: t.slice(0, 500), rating: el ? ratingNear(el) : 0 });
+  };
+  const found = pick(['.comment__text', '.feedback__text', '.feedback__content', '[data-testid="feedback-text"]', '.comments-list__text', '.comment-text', '.review-text']);
+  if (found.els.length) {
+    found.els.slice(0, 60).forEach((el) => push(el.innerText || el.textContent, el));
+    if (out.length) return { reviews: out.slice(0, 30), via: 'dom:' + found.sel };
   }
-  return out;
+  /* Generic: любой блок с классом про отзывы/комменты. */
+  try {
+    const all = [...document.querySelectorAll('[class]')].filter((el) => {
+      const c = String(el.getAttribute('class') || '');
+      return /comment|feedback|review|opinion|otzyv/i.test(c) && !/list|container|wrapper|section|block|wrap/i.test(c);
+    });
+    all.slice(0, 80).forEach((el) => push(el.innerText || el.textContent, el));
+    if (out.length) return { reviews: out.slice(0, 30), via: 'generic' };
+  } catch (e) {}
+  if (ld.length) return { reviews: ld, via: 'ld-few' };
+  return { reviews: [], via: 'none' };
 }
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg && msg.type === 'wbPing') { sendResponse({ ok: true }); return; }
   if (msg && msg.type === 'scrapeReviews') {
     scrapeReviews()
-      .then((reviews) => sendResponse({ ok: true, reviews }))
+      .then((r) => sendResponse({ ok: true, reviews: r.reviews || [], via: r.via || '?' }))
       .catch((e) => sendResponse({ ok: false, error: String((e && e.message) || e) }));
     return true;
   }
