@@ -334,7 +334,8 @@ async function searchPipeline({ struct, text, profile, feedback, limit, wardrobe
   // hybrid/live: веер запросов × страницы (до ~150 кандидатов с WB) →
   // скоринг всех → топ-50. Долгий WB режем по общему таймауту 12с и молча
   // откатываемся на остальное — чат не должен висеть.
-  if (CFG.dataSource === 'hybrid') {
+  // ВРЕМЕННО ВЫКЛЮЧЕНО флагом WB_FUNNEL=off (код цел, воронка не ходит вообще).
+  if (CFG.dataSource === 'hybrid' && process.env.WB_FUNNEL !== 'off') {
     try {
       const gdr = (profile && (profile.gender === 'male' || profile.gender === 'female')) ? profile.gender : '';
       const base = (text && text.trim()) ? [M.withGender(text.trim(), gdr)] : [];
