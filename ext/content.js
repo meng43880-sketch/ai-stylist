@@ -169,25 +169,61 @@ async function scrapeReviews() {
     try {
       const all = [...document.querySelectorAll('[class]')].filter((el) => {
         const c = String(el.getAttribute('class') || '');
-        return /comment|feedback|review|opinion|otzyv/i.test(c) && !/list|container|wrapper|section|block|wrap/i.test(c);
+        /* ОСТОРОЖНО: 'list'/'block' убивают comments-list__item и feedback-block —
+           исключаем только явные обёртки страницы. */
+        return /comment|feedback|review|opinion|otzyv/i.test(c) && !/container|wrapper|section|wrap|page|modal|header|footer/i.test(c);
       });
-      all.slice(0, 100).forEach((el) => push(el.innerText || el.textContent, el));
+      all.slice(0, 140).forEach((el) => push(el.innerText || el.textContent, el));
       if (out.length >= 5) return 'generic';
     } catch (e) {}
     return '';
   };
-  /* Догрузка циклами: кнопка «ещё» + скролл, пока растёт (макс. 3 круга). */
-  let via = collectOnce();
-  for (let round = 0; round < 3 && out.length < 30 && !via; round++) {
+  /* Догрузка циклами: кнопка «ещё» (любой тег) + скролл окна и контейнера. */
+  const clickMore = () => {
     try {
-      const more = [...document.querySelectorAll('button,a')].find((b) => /показать.*отзыв|все.*отзыв|ещё.*\d+|загрузить|показать ещё/i.test((b.textContent || '').slice(0, 60)));
-      if (more) { more.click(); await HSLEEP(2000); }
+      const cands = [...document.querySelectorAll('button,a,div,span')].filter((b) => {
+        const t = (b.innerText || b.textContent || '').trim();
+        if (t.length > 60 || t.length < 3) return false;
+        return /отзыв/i.test(t) && /показать|все|ещё|больше|загрузить|далее/i.test(t);
+      });
+      cands.sort((a, b) => (a.innerText || '').length - (b.innerText || '').length);
+      if (cands[0]) { cands[0].click(); return true; }
+    } catch (e) {}
+    return false;
+  };
+  const scrollReviews = async () => {
+    try {
+      const head = [...document.querySelectorAll('h1,h2,h3')].find((h) => /отзыв/i.test(h.textContent || ''));
+      let box = head ? head.parentElement : null;
+      let guard = 0;
+      while (box && guard++ < 6) {
+        try {
+          const cs = window.getComputedStyle(box);
+          if ((cs.overflowY === 'auto' || cs.overflowY === 'scroll') && box.scrollHeight > box.clientHeight + 50) {
+            box.scrollTop = box.scrollHeight;
+            await HSLEEP(1200);
+            box.scrollTop = 0;
+            return;
+          }
+        } catch (e) {}
+        box = box.parentElement;
+      }
     } catch (e) {}
     for (let i = 0; i < 4; i++) {
       try { window.scrollBy(0, 1000); } catch (e) {}
       await HSLEEP(1000);
     }
-    via = collectOnce();
+  };
+  let via = collectOnce();
+  /* Даже если что-то нашлось — пробуем догрузить: останавливаемся,
+     только когда число перестало расти (макс. 4 круга). */
+  for (let round = 0; round < 4 && out.length < 30; round++) {
+    const before = out.length;
+    clickMore();
+    await HSLEEP(1500);
+    await scrollReviews();
+    via = collectOnce() || via;
+    if (out.length <= before) break;
   }
   if (out.length) return { reviews: out.slice(0, 30), via: via || 'generic', debug };
   if (ld.length) return { reviews: ld, via: 'ld-few', debug };
