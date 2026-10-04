@@ -606,4 +606,35 @@ async function explainProduct(productId, bodyProduct, uid) {
     note: 'Оценки — эвристика sainvio под твой профиль, а не объективная метрика качества.'
   };
 }
-module.exports = { analyzePhoto, describeItem, productAnalysis, searchPipeline, scoreCtx, structFromIntent, chat, getWeather, demoVision, explainProduct };
+/* AI-комментарий по живым отзывам (§21, §34): 2–3 предложения по-русски,
+   только повторяющиеся моменты; мало данных — честно короче. */
+async function reviewComment(productId, reviews) {
+  const list = (reviews || []).slice(0, 30);
+  const sum = list.reduce((a, r) => a + (r.rating || 0), 0);
+  const avg = list.length ? Math.round((sum / list.length) * 10) / 10 : 0;
+  if (!Q.isConfigured(CFG.qwen.product)) {
+    const pos = list.filter((r) => (r.rating || 0) >= 4).length;
+    return {
+      productId, source: 'signals', count: list.length, avg,
+      comment: list.length
+        ? `По отзывам на WB: средняя оценка ${avg} из 5, хвалебных ${pos} из ${list.length}. Детали — на странице товара.`
+        : null
+    };
+  }
+  const t0 = Date.now();
+  const body = list.map((r, i) => `${i + 1}. [${r.rating || '?'}] ${r.text}`).join('\n').slice(0, 4000);
+  const obj = await Q.chatJSON(CFG.qwen.product, {
+    system: 'You read Russian marketplace reviews. Reply STRICT JSON: {comment: "2-3 short Russian sentences summarizing ONLY recurring points (fit, quality, material, defects)", pros: [up to 3 short phrases], cons: [up to 2 short phrases]}. Never invent what reviews do not say. If reviews are few or contradictory, say so briefly.',
+    user: `Reviews:\n${body}`,
+    required: [], tag: 'product', maxTokens: 350
+  });
+  const out = {
+    productId, source: 'qwen-product', count: list.length, avg,
+    comment: pickStr(obj, ['comment', 'summary', 'text', 'response']),
+    pros: Array.isArray(obj.pros) ? obj.pros.map(String).slice(0, 3) : [],
+    cons: Array.isArray(obj.cons) ? obj.cons.map(String).slice(0, 2) : []
+  };
+  logHistory('ai', `reviewcm ${CFG.qwen.product.model} ${Date.now() - t0}ms ${productId}`);
+  return out;
+}
+module.exports = { analyzePhoto, describeItem, productAnalysis, searchPipeline, scoreCtx, structFromIntent, chat, getWeather, demoVision, explainProduct, reviewComment };

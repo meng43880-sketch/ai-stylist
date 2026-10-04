@@ -81,7 +81,7 @@ function authUid(req) {
   return u.id;
 }
 /* Публичные ручки (без токена). Всё остальное /api — только со входом. */
-const PUBLIC_API = ['/api/status', '/api/context', '/api/market/wb/search', '/api/market/ozon/search', '/api/market/link', '/api/collector/push', '/api/collector/status', '/api/live/pending', '/api/live/deliver'];
+const PUBLIC_API = ['/api/status', '/api/context', '/api/market/wb/search', '/api/market/ozon/search', '/api/market/link', '/api/collector/push', '/api/collector/status', '/api/collector/reviews', '/api/live/pending', '/api/live/deliver'];
 
 async function route(req, res) {
   const url = new URL(req.url, 'http://x');
@@ -207,7 +207,7 @@ async function route(req, res) {
       return sendGz(res, req, 200, { ok: true, outfits: outs });
     }
     /* --- products --- */
-    const pm = p.match(/^\/api\/products\/([a-z0-9]+)(\/reviews|\/analysis|\/explanation|\/availability)?$/i);
+    const pm = p.match(/^\/api\/products\/([a-z0-9]+)(\/reviews|\/analysis|\/explanation|\/availability|\/review-comment)?$/i);
     if (m === 'GET' && pm) {
       let prod = C.DemoProductProvider.getById(pm[1]);
       if (!prod && String(pm[1]).startsWith('ds')) {
@@ -216,6 +216,24 @@ async function route(req, res) {
         prod = rows.find((x) => x.id === pm[1]) || null;
       }
       if (pm[2] === '/explanation') return send(res, 200, { ok: true, data: await O.explainProduct(pm[1], null, uid) });
+      /* review-comment — раньше проверки товара: отзывов может не быть вовсе. */
+      if (pm[2] === '/review-comment') {
+        const hitC = getCache('reviewcm', pm[1], 7 * 24 * 3600 * 1000);
+        if (hitC) return send(res, 200, { ok: true, data: hitC });
+        const raw = getCache('reviews', pm[1], 30 * 24 * 3600 * 1000);
+        if (!raw || !(raw.reviews || []).length)
+          return send(res, 404, { ok: false, code: 'NO_REVIEWS', error: 'Отзывов пока нет' });
+        try {
+          const out = await O.reviewComment(pm[1], raw.reviews);
+          setCache('reviewcm', pm[1], out);
+          return send(res, 200, { ok: true, data: out });
+        } catch (e) {
+          /* AI чихнул — отдаём честные цифры вместо 500, фронт допросит позже. */
+          const rs = raw.reviews || [];
+          const avg = rs.length ? Math.round((rs.reduce((a, r) => a + (r.rating || 0), 0) / rs.length) * 10) / 10 : 0;
+          return send(res, 200, { ok: true, data: { productId: pm[1], source: 'signals', count: rs.length, avg, comment: null } });
+        }
+      }
       if (pm[2] === '/availability') {
         const service = new M.MarketplaceService();
         const av = await service.getAvailability(pm[1]);
@@ -233,6 +251,7 @@ async function route(req, res) {
         await EV.logEvent(U, 'open_composition', pm[1], {}); save();
         return send(res, 200, { ok: true, data: await O.productAnalysis(pm[1]) });
       }
+
       await EV.logEvent(U, 'open', pm[1], {}); save();
       const r = R.scoreProduct(prod, O.scoreCtx(profile(U), feedback(U), { wardrobe: U.wardrobe, taste: U.taste, favorites: U.favorites }));
       return send(res, 200, { ok: true, product: Object.assign({}, prod, { aiScore: r.score, aiParts: r.parts, url: C.mpSearchUrl(prod) }) });
@@ -334,6 +353,21 @@ async function route(req, res) {
       const out = HF.setItems(b.items);
       logHistory('collector', `Мост: принято ${out.accepted}`, uid);
       return send(res, 200, { ok: true, data: out });
+    }
+    /* Отзывы с карточки (расширение, секрет): сырьё для AI-комментария. */
+    if (m === 'POST' && p === '/api/collector/reviews') {
+      const key = String(req.headers['x-collector-key'] || '');
+      if (!process.env.COLLECTOR_KEY || key !== process.env.COLLECTOR_KEY)
+        return send(res, 403, { ok: false, code: 'AUTH', error: 'Нет доступа' });
+      const b = await readBody(req);
+      const pid = String(b.productId || '').slice(0, 40);
+      const list = (Array.isArray(b.reviews) ? b.reviews : []).slice(0, 30).map((r) => ({
+        text: String((r && r.text) || '').slice(0, 500),
+        rating: Math.max(0, Math.min(5, parseInt((r && r.rating)) || 0))
+      })).filter((r) => r.text.length >= 10);
+      if (!pid || !list.length) return send(res, 400, { ok: false, error: 'Нужны productId и отзывы' });
+      setCache('reviews', pid, { reviews: list, ts: Date.now(), count: list.length });
+      return send(res, 200, { ok: true, data: { saved: list.length } });
     }
     /* --- live relay: телефон без расширения ←→ домашнее расширение.
        Очередь в памяти (TTL 3 мин, редеплой её роняет — заказы просто пропадут,

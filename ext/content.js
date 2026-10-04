@@ -91,8 +91,49 @@ async function humanSearch(query, opts) {
   cards = findCards();
   return cards.slice(0, 30).map(readCard).filter(Boolean);
 }
+/* Отзывы карточки: скроллим к отзывам, собираем до 30 (текст+оценка).
+   Селекторы — веером с запасом: вёрстка WB дрейфует. */
+async function scrapeReviews() {
+  const pick = (sels) => {
+    for (const s of sels) {
+      try { const els = [...document.querySelectorAll(s)]; if (els.length) return els; } catch (e) {}
+    }
+    return [];
+  };
+  try {
+    const head = [...document.querySelectorAll('h2,h3')].find((h) => /отзыв/i.test(h.textContent || ''));
+    if (head) { head.scrollIntoView({ block: 'start' }); await HSLEEP(1500); }
+  } catch (e) {}
+  for (let i = 0; i < 4; i++) {
+    try { window.scrollBy(0, 900); } catch (e) {}
+    await HSLEEP(1200);
+  }
+  const texts = pick(['.comment__text', '.feedback__text', '.feedback__content', '[data-testid="feedback-text"]', '.comments-list__text', '.comment-text']);
+  const out = [], seen = new Set();
+  const scope = texts.length ? texts : pick(['.comment', '.feedback', '.feedback__item', '.comments-list__item', '[data-card-index]']);
+  for (const el of scope.slice(0, 60)) {
+    const t = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
+    if (t.length < 15 || t.length > 1200 || seen.has(t.slice(0, 60))) continue;
+    seen.add(t.slice(0, 60));
+    let rating = 0;
+    const rs = el.querySelector ? (el.querySelector('.comment__rating') || el.querySelector('.feedback__rating') || el.querySelector('[class*="star"]')) : null;
+    if (rs) {
+      const m = String(rs.getAttribute('class') + ' ' + (rs.textContent || '')).match(/([1-5])/);
+      if (m) rating = +m[1];
+    }
+    out.push({ text: t.slice(0, 500), rating });
+    if (out.length >= 30) break;
+  }
+  return out;
+}
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg && msg.type === 'wbPing') { sendResponse({ ok: true }); return; }
+  if (msg && msg.type === 'scrapeReviews') {
+    scrapeReviews()
+      .then((reviews) => sendResponse({ ok: true, reviews }))
+      .catch((e) => sendResponse({ ok: false, error: String((e && e.message) || e) }));
+    return true;
+  }
   if (msg && msg.type === 'humanSearch') {
     humanSearch(msg.query, { fast: !!msg.fast })
       .then((items) => sendResponse({ ok: true, items }))

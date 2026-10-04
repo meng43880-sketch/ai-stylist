@@ -230,6 +230,8 @@ function save() {
 const NEED_AUTH = ['home', 'results', 'product', 'outfit', 'outfits', 'favorites', 'profile', 'wardrobe'];
 function go(route, params) {
   if (!S.token && NEED_AUTH.includes(route)) { route = 'auth'; params = {}; }
+  /* Ушли с карточки — вкладку WB можно закрывать (до этого живёт). */
+  if (S.route === 'product' && route !== 'product') { try { extCloseProduct(); } catch (e) {} }
   S.route = route; S.params = params || {}; render(); const a = $('#app'); if (a) a.scrollTop = 0;
 }
 window.go = go;
@@ -943,13 +945,6 @@ window.__loadProduct = async function (id) {
 function renderDemoProduct(p, rv, id) {
     const fav = S.favorites.includes(p.id);
     const need = p.cat === 'shoes' ? S.profile.shoeSize : p.cat === 'bottom' ? S.profile.pantsSize : S.profile.topSize;
-    const an = p.aiParts || {};
-    const rows = [
-      ['Стиль', an.style, 'Соответствует твоему профилю.'],
-      ['Посадка', an.body, `Фасон «${p.fit}» может подойти под твои пропорции.`],
-      ['Цена', an.budget, p.price <= S.profile.budget ? 'В пределах бюджета.' : 'Выше бюджета, но оценка высокая.'],
-      ['Качество', an.quality, 'Состав и сигналы из отзывов.']
-    ];
     const el = document.getElementById('pbody');
     if (!el || S.route !== 'product') return;
     el.innerHTML = `
@@ -966,25 +961,20 @@ function renderDemoProduct(p, rv, id) {
       <div class="field"><label>Размер · твой ${esc(need)}</label></div>
       <div class="sizes">${p.sizes.map((s) => `<button class="size ${String(s) === String(need) ? 'on' : ''}">${s}</button>`).join('')}</div>
       <div class="note"><b>${p.aiScore}% тебе подходит.</b> Почему — ниже.</div>
-      <div class="why">${rows.map(([t, v, d]) => `<div class="whyrow"><div><b>${t}</b><span>${d}</span></div><span class="n">${v == null ? '—' : v}</span></div>`).join('')}</div>
+      <div class="why" id="whyrows"><div class="whyrow"><div><b>Считаем…</b><span>Факторы под твой профиль.</span></div></div></div>
       ${rv && rv.data ? `<div class="field"><label>Отзывы · ${rv.data.count}</label></div><p class="sub">Часто хвалят: ${(rv.data.reviews || []).filter((r) => r.rating >= 5).slice(0, 2).map((r) => esc(r.text.split('.')[0].toLowerCase())).join('; ') || '—'}.</p>` : ''}
       <div style="height:170px"></div>
       <div class="cta"><button class="btn" onclick="market('${p.id}')">Открыть в магазине ${ic('upRight', 16)}</button>
       <button class="btn secondary" onclick="dislike('${p.id}')">Не моё</button></div>`;
     el.querySelectorAll('.size').forEach((b) => b.onclick = () => { el.querySelectorAll('.size').forEach((x) => x.classList.remove('on')); b.classList.add('on'); });
+    __loadFactors(p.id, false);
 }
-/* Живой товар WB: рендерим из кеша, отзывы не выдумываем. */
+/* Живой товар WB: % сразу, факторы — лениво по открытию (свежий пересчёт),
+   цены-фактора нет, есть ряд Отзывы (AI по 30 живым отзывам, когда приедут). */
 function renderLiveProduct(p) {
   const el = document.getElementById('pbody');
   if (!el || S.route !== 'product') return;
   const fav = S.favorites.includes(p.id);
-  const an = p.aiParts || {};
-  const rows = [
-    ['Стиль', an.style, 'Соответствует твоему профилю.'],
-    ['Посадка', an.body, 'Ориентируемся на указанный размер.'],
-    ['Цена', an.budget, 'Живая цена Wildberries на момент поиска.'],
-    ['Рейтинг', an.quality, p.reviews ? `На WB: ${p.rating} · ${Number(p.reviews).toLocaleString('ru-RU')} оценок.` : 'Рейтинг WB.']
-  ];
   el.innerHTML = `
     <div class="gal" style="margin:14px -20px 0;position:relative">${galMain(p)}
       <button class="iconbtn l" style="position:absolute;top:14px;left:14px" onclick="go('home')" aria-label="Назад">${ic('back', 19)}</button>${galThumbs(p)}</div>
@@ -995,10 +985,58 @@ function renderLiveProduct(p) {
     <p class="sub">${esc(p.brand || '')} · размеры на WB: <b style="color:var(--ink)">${(p.sizes || []).slice(0, 6).join(', ')}</b></p>
     ${p.nmId ? `<button class="link" style="padding:4px 0" onclick="copyArt('${p.nmId}')">Артикул WB: <b>${p.nmId}</b> · копировать</button>` : ''}
     <div class="note"><b>${p.aiScore}% тебе подходит.</b> Живые данные WB — цена и наличие на момент поиска.</div>
-    <div class="why">${rows.map(([t, v, d]) => `<div class="whyrow"><div><b>${t}</b><span>${d}</span></div><span class="n">${v == null ? '—' : v}</span></div>`).join('')}</div>
-    <p class="sub">Отзывы и точное наличие — на странице товара в магазине, мы их не копируем.</p>
+    <div class="why" id="whyrows"><div class="whyrow"><div><b>Считаем…</b><span>Факторы под твой профиль.</span></div></div></div>
+    <p class="sub">Точное наличие — на странице товара в магазине, мы его не копируем.</p>
     <div style="height:150px"></div>
     <div class="cta"><button class="btn" onclick="market('${p.id}')">Купить на Wildberries ${ic('upRight', 16)}</button></div>`;
+  if (p.nmId) extOpenProduct(p.nmId);
+  __loadFactors(p.id, true);
+}
+/* Ленивые факторы карточки + ряд Отзывы. Вызывается только открытием карточки. */
+window.__loadFactors = async function (id, isLive) {
+  const el = document.getElementById('whyrows');
+  if (!el || S.route !== 'product') return;
+  try {
+    let ex;
+    if (isLive) {
+      const p = RC[id];
+      const r = await Api.post('/api/products/explanation', { productId: id, product: p || null });
+      ex = r.data;
+    } else {
+      const r = await Api.get('/api/products/' + id + '/explanation');
+      ex = r.data;
+    }
+    const rows = (ex.factors || []).filter((f) => f.key !== 'budget');
+    el.innerHTML = rows.map((f) => `<div class="whyrow"><div><b>${esc(f.title)}</b><span>${esc(f.text)}</span></div><span class="n">${f.value == null ? '—' : f.value}</span></div>`).join('')
+      + `<div class="whyrow" id="revrow"><div><b>Отзывы</b><span>Читаем живые отзывы…</span></div></div>`
+      + (ex.redundancy ? `<div class="whyrow"><div><b>Гардероб</b><span>${esc(ex.redundancy)}</span></div></div>` : '');
+    pollReviewComment(id);
+  } catch (e) {
+    el.innerHTML = `<div class="whyrow"><div><b>Не посчиталось</b><span>Проверь соединение и зайди снова.</span></div></div>`;
+  }
+};
+async function pollReviewComment(id) {
+  for (let i = 0; i < 8; i++) {
+    try {
+      const r = await Api.get('/api/products/' + encodeURIComponent(id) + '/review-comment');
+      if (r.data && r.data.comment) {
+        const el = document.getElementById('revrow');
+        if (el && S.route === 'product') el.innerHTML = `<div><b>Отзывы · ${r.data.count || ''}</b><span>${esc(r.data.comment)}</span></div>`;
+        return;
+      }
+    } catch (e) {}
+    await new Promise((res) => setTimeout(res, 8000));
+    if (!document.getElementById('revrow')) return;
+  }
+  const el = document.getElementById('revrow');
+  if (el) el.innerHTML = `<div><b>Отзывы</b><span>Пока тихо — загляни на страницу магазина.</span></div>`;
+}
+/* Расширению: открыть карточку WB и прочитать отзывы (мост живёт пока читаешь ленту). */
+function extOpenProduct(nmId) {
+  try { window.postMessage({ src: 'sainvio-web', want: 'openProduct', nmId: String(nmId || '') }, '*'); } catch (e) {}
+}
+function extCloseProduct() {
+  try { window.postMessage({ src: 'sainvio-web', want: 'closeProduct' }, '*'); } catch (e) {}
 }
 function shareUrl(p) {
   if (p.live && p.url) return p.url;

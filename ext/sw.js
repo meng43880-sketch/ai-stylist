@@ -59,6 +59,7 @@ async function wbTabSend(type, url, query, fast) {
   const tabs = await chrome.tabs.query({ url: 'https://www.wildberries.ru/*' });
   let tab = null, mine = false;
   for (const t of tabs) {
+    if (t.id === __productTab) continue; // карточка пользователя — не угоняем
     if (await ping(t.id, 3)) { tab = t; break; }
   }
   if (!tab) {
@@ -289,10 +290,58 @@ async function healPhotos() {
   }
   await chrome.storage.local.set({ running: false, lastRun: Date.now(), lastCount: fixed.length });
 }
+/* Карточка в приложении: открываем её на WB и НЕ закрываем, пока юзер
+   в ленте. Читаем до 30 отзывов, пушим на сервер для AI-комментария. */
+let __productTab = null;
+async function openProduct(nmId) {
+  const id = String(nmId || '').replace(/\D/g, '');
+  if (!id) return;
+  const url = `https://www.wildberries.ru/catalog/${id}/detail.aspx`;
+  try {
+    if (__productTab) {
+      try { await chrome.tabs.get(__productTab); await chrome.tabs.update(__productTab, { url }); }
+      catch (e) { __productTab = null; }
+    }
+    if (!__productTab) {
+      const tab = await chrome.tabs.create({ url, active: false });
+      __productTab = tab.id;
+    }
+    for (let i = 0; i < 15; i++) {
+      try {
+        const pong = await chrome.tabs.sendMessage(__productTab, { type: 'wbPing' });
+        if (pong && pong.ok) break;
+      } catch (e) {}
+      await sleep(1000);
+    }
+    await sleep(2500); // дать карточке и отзывам отрисоваться
+    let reviews = [];
+    try {
+      const res = await chrome.tabs.sendMessage(__productTab, { type: 'scrapeReviews' });
+      if (res && res.ok) reviews = (res.reviews || []).slice(0, 30);
+    } catch (e) {}
+    await log('карточка ' + id + ': отзывов ' + reviews.length);
+    if (!reviews.length) return;
+    const cfg = await chrome.storage.local.get(['backend', 'key']);
+    if (!cfg.backend || !cfg.key) return;
+    await fetch(cfg.backend.replace(/\/$/, '') + '/api/collector/reviews', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-collector-key': cfg.key },
+      body: JSON.stringify({ productId: 'wb' + id, nmId: id, reviews })
+    }).catch(() => {});
+  } catch (e) { await log('openProduct ERR ' + e.message); }
+}
+async function closeProduct() {
+  if (__productTab) {
+    try { await chrome.tabs.remove(__productTab); } catch (e) {}
+    __productTab = null;
+  }
+}
 chrome.runtime.onMessage.addListener((m, sender, sendResponse) => {
   if (m && m.type === 'collect') { runCollect().finally(() => pollRelay()); return; }
   if (m && m.type === 'heal') { healPhotos(); return; }
   if (m && m.type === 'pollRelay') { pollRelay(); return; }
+  if (m && m.type === 'openProduct') { openProduct(m.nmId); return; }
+  if (m && m.type === 'closeProduct') { closeProduct(); return; }
   if (m && m.type === 'liveQuery') {
     runLiveQuery(m.query || '').then(sendResponse);
     return true;
