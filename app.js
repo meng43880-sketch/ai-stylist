@@ -1015,8 +1015,9 @@ window.__loadFactors = async function (id, isLive) {
     el.innerHTML = `<div class="whyrow"><div><b>Не посчиталось</b><span>Проверь соединение и зайди снова.</span></div></div>`;
   }
 };
+/* Опрос длиннее скрапа (12×10с): отзывы приезжают позже открытия карточки. */
 async function pollReviewComment(id) {
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < 12; i++) {
     try {
       const r = await Api.get('/api/products/' + encodeURIComponent(id) + '/review-comment');
       if (r.data && r.data.comment) {
@@ -1025,12 +1026,20 @@ async function pollReviewComment(id) {
         return;
       }
     } catch (e) {}
-    await new Promise((res) => setTimeout(res, 8000));
+    await new Promise((res) => setTimeout(res, 10000));
     if (!document.getElementById('revrow')) return;
   }
   const el = document.getElementById('revrow');
   if (el) el.innerHTML = `<div><b>Отзывы</b><span>Пока тихо — загляни на страницу магазина.</span></div>`;
 }
+/* Вернулся на вкладку — а комментарий мог уже приехать: допрашиваем заново. */
+try {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible' || S.route !== 'product') return;
+    const el = document.getElementById('revrow');
+    if (el && /Читаем|тихо/i.test(el.textContent || '') && S.params && S.params.id) pollReviewComment(S.params.id);
+  });
+} catch (e) {}
 /* Расширению: открыть карточку WB и прочитать отзывы (мост живёт пока читаешь ленту). */
 function extOpenProduct(nmId) {
   try { window.postMessage({ src: 'sainvio-web', want: 'openProduct', nmId: String(nmId || '') }, '*'); } catch (e) {}
