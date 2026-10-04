@@ -135,13 +135,20 @@ function ratingNear(el) {
 }
 async function scrapeReviews() {
   const ld = reviewsFromLd().slice(0, 30);
-  if (ld.length >= 5) return { reviews: ld, via: 'ld' };
+  if (ld.length >= 5) return { reviews: ld, via: 'ld', debug };
   const pick = (sels) => {
     for (const s of sels) {
       try { const els = [...document.querySelectorAll(s)]; if (els.length) return { els, sel: s }; } catch (e) {}
     }
     return { els: [], sel: '' };
   };
+  const debug = { title: String(document.title || '').slice(0, 80), tabClicked: false };
+  try {
+    const tab = [...document.querySelectorAll('button,a,[role="tab"]')].find((b) => (
+      /отзыв/i.test((b.textContent || '').slice(0, 40)) && !/показать|все/i.test((b.textContent || '').slice(0, 40))
+    ));
+    if (tab) { tab.click(); debug.tabClicked = true; await HSLEEP(2000); }
+  } catch (e) {}
   try {
     const head = [...document.querySelectorAll('h1,h2,h3')].find((h) => /отзыв/i.test(h.textContent || ''));
     if (head) { head.scrollIntoView({ block: 'start' }); await HSLEEP(1500); }
@@ -165,7 +172,7 @@ async function scrapeReviews() {
   const found = pick(['.comment__text', '.feedback__text', '.feedback__content', '[data-testid="feedback-text"]', '.comments-list__text', '.comment-text', '.review-text']);
   if (found.els.length) {
     found.els.slice(0, 60).forEach((el) => push(el.innerText || el.textContent, el));
-    if (out.length) return { reviews: out.slice(0, 30), via: 'dom:' + found.sel };
+    if (out.length) return { reviews: out.slice(0, 30), via: 'dom:' + found.sel, debug };
   }
   /* Generic: любой блок с классом про отзывы/комменты. */
   try {
@@ -174,16 +181,21 @@ async function scrapeReviews() {
       return /comment|feedback|review|opinion|otzyv/i.test(c) && !/list|container|wrapper|section|block|wrap/i.test(c);
     });
     all.slice(0, 80).forEach((el) => push(el.innerText || el.textContent, el));
-    if (out.length) return { reviews: out.slice(0, 30), via: 'generic' };
+    if (out.length) return { reviews: out.slice(0, 30), via: 'generic', debug };
   } catch (e) {}
-  if (ld.length) return { reviews: ld, via: 'ld-few' };
-  return { reviews: [], via: 'none' };
+  if (ld.length) return { reviews: ld, via: 'ld-few', debug };
+  let bodyHas = false, candCount = 0;
+  try {
+    bodyHas = /отзыв/i.test(document.body ? document.body.innerText.slice(0, 20000) : '');
+    candCount = document.querySelectorAll('[class*="comment"],[class*="feedback"],[class*="review"]').length;
+  } catch (e) {}
+  return { reviews: [], via: 'none', debug: Object.assign(debug, { bodyHasOtzyv: bodyHas, candCount }) };
 }
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg && msg.type === 'wbPing') { sendResponse({ ok: true }); return; }
   if (msg && msg.type === 'scrapeReviews') {
     scrapeReviews()
-      .then((r) => sendResponse({ ok: true, reviews: r.reviews || [], via: r.via || '?' }))
+      .then((r) => sendResponse({ ok: true, reviews: r.reviews || [], via: r.via || '?', debug: r.debug || null }))
       .catch((e) => sendResponse({ ok: false, error: String((e && e.message) || e) }));
     return true;
   }
