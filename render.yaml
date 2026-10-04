@@ -22,6 +22,10 @@ services:
         value: mistralai/mistral-nemo
       - key: QWEN_VISION_MODEL
         value: z-ai/glm-5.3-flash
+      - key: ZVENO_FREE_MODELS
+        value: dots-studio/dots-3-note-preview:free,mistralai/mistral-nemo
+      - key: ZVENO_PAID_MODEL
+        value: z-ai/glm-5.3-flash
       - key: ZVENO_API_KEY
         sync: false
       - key: DATABASE_URL

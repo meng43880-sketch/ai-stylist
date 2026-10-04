@@ -25,7 +25,11 @@ function num(v, d) { const n = Number(v); return Number.isFinite(n) ? n : d; }
 const ZVENO_KEY = process.env.ZVENO_API_KEY || '';
 const ZVENO_BASE = (process.env.ZVENO_BASE_URL || 'https://api.zveno.ai/v1').replace(/\/$/, '');
 const ZVENO_MODEL = process.env.ZVENO_MODEL || 'dots-studio/dots-3-note-preview:free';
-const ZVENO_FALLBACKS = (process.env.ZVENO_FALLBACKS || 'nvidia/nemotron-3.5-lightning:free,nvidia/nemotron-3-ultra-550b-a55b:free,inclusionai/ling-3.0-flash-sante:free').split(',').map((s) => s.trim()).filter(Boolean);
+/* Free-цепочка: ТОЛЬКО живые (dots → nemo). Мёртвые nemotron/ling/gemma убраны —
+   они давали десятки ошибок и тормозили каждый запрос. */
+const ZVENO_FREE_MODELS = (process.env.ZVENO_FREE_MODELS || 'dots-studio/dots-3-note-preview:free,mistralai/mistral-nemo').split(',').map((s) => s.trim()).filter(Boolean);
+/* Платный фолбэк: один, сразу после free (GLM-5.3-Flash: дёшево + умеет vision). */
+const ZVENO_PAID_MODEL = (process.env.ZVENO_PAID_MODEL || 'z-ai/glm-5.3-flash').trim();
 function qwenProvider(name, ofoxModel, dashBase, dashModel) {
   if (process.env['QWEN_' + name + '_API_KEY']) {
     return {
@@ -39,7 +43,7 @@ function qwenProvider(name, ofoxModel, dashBase, dashModel) {
     return { key: process.env.OFOX_API_KEY, base: ofoxBase, model: process.env['QWEN_' + name + '_MODEL'] || ofoxModel };
   }
   if (ZVENO_KEY) {
-    return { key: ZVENO_KEY, base: ZVENO_BASE, model: process.env['QWEN_' + name + '_MODEL'] || ZVENO_MODEL, fallbacks: ZVENO_FALLBACKS };
+    return { key: ZVENO_KEY, base: ZVENO_BASE, model: process.env['QWEN_' + name + '_MODEL'] || ZVENO_MODEL, free: ZVENO_FREE_MODELS, paid: ZVENO_PAID_MODEL };
   }
   return { key: '', base: dashBase.replace(/\/$/, ''), model: dashModel };
 }

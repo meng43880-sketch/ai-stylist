@@ -57,7 +57,7 @@ async function analyzePhoto({ image, profile }) {
   const norm = normalizeVision(obj);
   const out = Object.assign({ source: 'qwen-vision', model: CFG.qwen.vision.model }, norm);
   setCache('vision', key, out);
-  logHistory('ai', `vision ${CFG.qwen.vision.model} ${Date.now() - tV}ms`);
+  logHistory('ai', `vision ${Q.getLastModel('vision') || CFG.qwen.vision.model} ${Date.now() - tV}ms`);
   return Object.assign({ cached: false }, out);
 }
 
@@ -182,7 +182,7 @@ async function analyzeLiveItem(item) {
   });
   const out = Object.assign({ productId: item.id, source: 'qwen-product' }, normalizeProduct(obj, item));
   setCache('analyses', item.id, out);
-  logHistory('ai', `product ${CFG.qwen.product.model} ${Date.now() - tP}ms ${item.id}`);
+  logHistory('ai', `product ${Q.getLastModel('product') || CFG.qwen.product.model} ${Date.now() - tP}ms ${item.id}`);
   return out;
 }
 /* Новинки топа без кеша → AI#3 (макс. 8 за поиск, остальным — кеш/сигналы). */
@@ -522,7 +522,7 @@ async function chat({ message, conversationId, profile, feedback, uid, wardrobe,
         + '\nHistory: ' + JSON.stringify(hist);
       const rawAnswer = await Q.chatJSON(CFG.qwen.stylist, { system: sys, user: userMsg, required: [], tag: 'stylist', maxTokens: 500 });
       const answer = normalizeStylist(rawAnswer);
-      logHistory('ai', `stylist ${CFG.qwen.stylist.model} ${Date.now() - tAI}ms cached:${answer.cached ? 1 : 0}`);
+      logHistory('ai', `stylist ${Q.getLastModel('stylist') || CFG.qwen.stylist.model} ${Date.now() - tAI}ms cached:${answer.cached ? 1 : 0}`);
       /* Intent: AI поверх базы; страховка — база всегда валидна. */
       const aiIntent = answer.intentObj && answer.intentObj.hard ? answer.intentObj : null;
       const intent = aiIntent ? {
@@ -634,7 +634,7 @@ async function reviewComment(productId, reviews) {
     pros: Array.isArray(obj.pros) ? obj.pros.map(String).slice(0, 3) : [],
     cons: Array.isArray(obj.cons) ? obj.cons.map(String).slice(0, 2) : []
   };
-  logHistory('ai', `reviewcm ${CFG.qwen.product.model} ${Date.now() - t0}ms ${productId}`);
+  logHistory('ai', `reviewcm ${Q.getLastModel('product') || CFG.qwen.product.model} ${Date.now() - t0}ms ${productId}`);
   return out;
 }
 module.exports = { analyzePhoto, describeItem, productAnalysis, searchPipeline, scoreCtx, structFromIntent, chat, getWeather, demoVision, explainProduct, reviewComment };
