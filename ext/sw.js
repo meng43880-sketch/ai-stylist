@@ -332,7 +332,9 @@ async function openProduct(nmId) {
         headers: { 'Content-Type': 'application/json', 'x-collector-key': cfg.key },
         body: JSON.stringify({ productId: 'wb' + id, nmId: id, reviews })
       });
-      await log('push отзывов -> HTTP ' + r.status + ' (key …' + String(cfg.key).slice(-4) + ')');
+      let body = '';
+      try { body = (await r.text()).slice(0, 100); } catch (e) {}
+      await log('push отзывов -> HTTP ' + r.status + ' (key …' + String(cfg.key).slice(-4) + ') ' + body);
     } catch (e) { await log('push отзывов ERR ' + e.message); return; }
     /* Толкаем открытые вкладки приложения: страница сразу допросит комментарий. */
     try {
