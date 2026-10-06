@@ -154,9 +154,12 @@ async function scrapeReviews() {
     if (head) { head.scrollIntoView({ block: 'start' }); await HSLEEP(1500); }
   } catch (e) {}
   const out = [], seen = new Set();
+  /* Отсекаем не-отзывы: вопросы, кнопки, служебные фразы — иначе AI врёт по мусору. */
+  const JUNK = /^(показать|ответить|пожаловаться|полезно|не полезно|написать|свернуть|развернуть|ещё|еще|все|читать)/i;
   const push = (t, el) => {
     t = String(t || '').replace(/\s+/g, ' ').trim();
-    if (t.length < 15 || t.length > 1200 || seen.has(t.slice(0, 60))) return;
+    if (t.length < 25 || t.length > 1200 || seen.has(t.slice(0, 60))) return;
+    if (JUNK.test(t) || /\?$/.test(t)) return;
     seen.add(t.slice(0, 60));
     out.push({ text: t.slice(0, 500), rating: el ? ratingNear(el) : 0 });
   };

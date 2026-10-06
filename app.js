@@ -1027,7 +1027,14 @@ async function pollReviewComment(id) {
       const r = await Api.get('/api/products/' + encodeURIComponent(id) + '/review-comment');
       if (r.data && r.data.comment) {
         const el = document.getElementById('revrow');
-        if (el && S.route === 'product') el.innerHTML = `<div><b>Отзывы · ${r.data.count || ''}</b><span>${esc(r.data.comment)}</span></div>`;
+        if (el && S.route === 'product') {
+          const pros = (r.data.pros || []).filter(Boolean).map(esc).join(' · ');
+          const cons = (r.data.cons || []).filter(Boolean).map(esc).join(' · ');
+          el.innerHTML = `<div><b>Отзывы · ${r.data.count || ''}${r.data.avg ? ` · средняя ${r.data.avg}` : ''}</b>`
+            + `<span>${esc(r.data.comment)}</span>`
+            + (pros ? `<span style="color:#0A7D4B">Плюсы: ${pros}</span>` : '')
+            + (cons ? `<span style="color:#B3261E">Минусы: ${cons}</span>` : '') + `</div>`;
+        }
         return;
       }
     } catch (e) {}

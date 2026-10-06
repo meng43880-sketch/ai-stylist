@@ -622,11 +622,13 @@ async function reviewComment(productId, reviews) {
     };
   }
   const t0 = Date.now();
-  const body = list.map((r, i) => `${i + 1}. [${r.rating || '?'}] ${r.text}`).join('\n').slice(0, 4000);
+  const pos = list.filter((r) => (r.rating || 0) >= 4).length;
+  const neg = list.filter((r) => (r.rating || 0) <= 2).length;
+  const body = list.map((r, i) => `${i + 1}. [${r.rating || '?'}] ${r.text}`).join('\n').slice(0, 6000);
   const obj = await Q.chatJSON(CFG.qwen.product, {
-    system: 'You read Russian marketplace reviews. Reply STRICT JSON: {comment: "2-3 short Russian sentences summarizing ONLY recurring points (fit, quality, material, defects)", pros: [up to 3 short phrases], cons: [up to 2 short phrases]}. Never invent what reviews do not say. If reviews are few or contradictory, say so briefly.',
+    system: `You read Russian marketplace reviews (${list.length} total, ${pos} positive 4-5, ${neg} negative 1-2). Reply STRICT JSON: {comment: "4-6 sentences in Russian. Start with numbers (how many of how many praise what). Cover: fit/sizing, quality/material, defects/complaints. If reviews contradict each other, say what the majority thinks AND note the disagreement explicitly. Every claim must trace to the texts below — never invent details, brands, or facts not present", pros: [up to 3 short phrases], cons: [up to 3 short phrases]}. No advertising tone, no generic filler.`,
     user: `Reviews:\n${body}`,
-    required: [], tag: 'product', maxTokens: 350
+    required: [], tag: 'product', maxTokens: 600
   });
   const out = {
     productId, source: 'qwen-product', count: list.length, avg,
