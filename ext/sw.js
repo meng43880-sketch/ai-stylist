@@ -325,14 +325,14 @@ async function openProduct(nmId) {
     await log('карточка ' + id + ': отзывов ' + reviews.length + ' (' + via + ')' + dbg);
     if (!reviews.length) return;
     const cfg = await chrome.storage.local.get(['backend', 'key']);
-    if (!cfg.backend || !cfg.key) return;
+    if (!cfg.backend || !cfg.key) { await log('push отзывов: нет backend/key в попапе'); return; }
     try {
       const r = await fetch(cfg.backend.replace(/\/$/, '') + '/api/collector/reviews', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-collector-key': cfg.key },
         body: JSON.stringify({ productId: 'wb' + id, nmId: id, reviews })
       });
-      await log('push отзывов -> HTTP ' + r.status);
+      await log('push отзывов -> HTTP ' + r.status + ' (key …' + String(cfg.key).slice(-4) + ')');
     } catch (e) { await log('push отзывов ERR ' + e.message); return; }
     /* Толкаем открытые вкладки приложения: страница сразу допросит комментарий. */
     try {
