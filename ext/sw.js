@@ -349,8 +349,49 @@ async function closeProduct() {
     __productTab = null;
   }
 }
+/* Самопроверка одним кликом: backend, ключ, серверная диагностика,
+   вкладка WB, один человеческий поиск, одна проба фото. Ничего не пушит. */
+async function selfTest() {
+  const line = async (s) => { await log(s); };
+  await line('=== Самопроверка ===');
+  const cfg = await chrome.storage.local.get(['backend', 'key']);
+  const backend = (cfg.backend || '').replace(/\/$/, '');
+  if (!backend || !cfg.key) { await line('FAIL: нет backend/key в попапе'); return; }
+  await line(' backend: ' + backend);
+  try {
+    const r = await fetch(backend + '/api/diag');
+    const j = await r.json();
+    const d = (j && j.data) || {};
+    await line(` сервер: aiMode=${d.aiMode} data=${d.dataSource} funnel=${d.wbFunnel} takprodam=${d.takprodam && d.takprodam.enabled ? 'on' : 'off'}`);
+    await line(` мост: count=${d.collector && d.collector.count} alive=${d.collector && d.collector.alive} fresh=${d.collector && d.collector.fresh}`);
+    await line(` AI: stylist=${d.ai && d.ai.stylist} product=${d.ai && d.ai.product} calls=${d.ai && d.ai.usage && d.ai.usage.stylist && d.ai.usage.stylist.calls}`);
+  } catch (e) { await line('FAIL: сервер недоступен: ' + e.message); return; }
+  let tabId = null, mine = false;
+  try {
+    const tabs = await chrome.tabs.query({ url: 'https://www.wildberries.ru/*' });
+    for (const t of tabs) { if (t.id !== __productTab && await ping(t.id, 2)) { tabId = t.id; break; } }
+    if (!tabId) {
+      const tab = await chrome.tabs.create({ url: 'https://www.wildberries.ru/', active: false });
+      tabId = tab.id; mine = true;
+      if (!await ping(tabId, 8)) throw new Error('вкладка не отвечает');
+    }
+    await line(' вкладка WB: OK');
+    const res = await chrome.tabs.sendMessage(tabId, { type: 'humanSearch', query: 'футболка', fast: true });
+    const n = (res && res.ok && res.items ? res.items.length : 0);
+    await line(' поиск «футболка»: ' + n + ' шт' + (n ? '' : ' FAIL'));
+    if (n) {
+      const img = (res.items[0] && res.items[0].img) || '';
+      await line(' фото[0]: ' + String(img).slice(0, 90));
+      const ok = img ? await probePhoto(img) : false;
+      await line(' проба фото: ' + (ok ? 'OK грузится' : 'FAIL битое'));
+    }
+  } catch (e) { await line('FAIL: ' + e.message); }
+  finally { if (mine && tabId) { try { await chrome.tabs.remove(tabId); } catch (e) {} } }
+  await line('=== конец ===');
+}
 chrome.runtime.onMessage.addListener((m, sender, sendResponse) => {
   if (m && m.type === 'collect') { runCollect().finally(() => pollRelay()); return; }
+  if (m && m.type === 'selftest') { selfTest(); return; }
   if (m && m.type === 'heal') { healPhotos(); return; }
   if (m && m.type === 'pollRelay') { pollRelay(); return; }
   if (m && m.type === 'openProduct') { openProduct(m.nmId); return; }

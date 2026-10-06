@@ -28,4 +28,9 @@ const $ = (id) => document.getElementById(id);
     chrome.runtime.sendMessage({ type: 'heal' });
     await draw();
   };
+  $('selftest').onclick = async () => {
+    await chrome.storage.local.set({ backend: $('backend').value.trim(), key: $('key').value.trim(), log: [] });
+    chrome.runtime.sendMessage({ type: 'selftest' });
+    await draw();
+  };
 })();

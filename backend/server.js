@@ -81,7 +81,7 @@ function authUid(req) {
   return u.id;
 }
 /* Публичные ручки (без токена). Всё остальное /api — только со входом. */
-const PUBLIC_API = ['/api/status', '/api/context', '/api/market/wb/search', '/api/market/ozon/search', '/api/market/link', '/api/collector/push', '/api/collector/status', '/api/collector/reviews', '/api/live/pending', '/api/live/deliver'];
+const PUBLIC_API = ['/api/status', '/api/diag', '/api/context', '/api/market/wb/search', '/api/market/ozon/search', '/api/market/link', '/api/collector/push', '/api/collector/status', '/api/collector/reviews', '/api/live/pending', '/api/live/deliver'];
 
 async function route(req, res) {
   const url = new URL(req.url, 'http://x');
@@ -420,6 +420,20 @@ async function route(req, res) {
         return send(res, 200, { ok: true, data: { status: 'done', items: job.items } });
       }
       return send(res, 404, { ok: false, error: 'Не найдено' });
+    }
+    /* Самодиагностика для кнопки в расширении: что настроено, что живо. */
+    if (m === 'GET' && p === '/api/diag') {
+      const HF = require('./lib/homefeed');
+      const hs = HF.stats();
+      return send(res, 200, { ok: true, data: {
+        aiMode: CFG.aiMode, dataSource: CFG.dataSource, wbFunnel: process.env.WB_FUNNEL || 'on',
+        takprodam: { enabled: (process.env.TAKPRODAM_ENABLED || '').toLowerCase() === 'true', key: !!process.env.TAKPRODAM_API_KEY },
+        collector: { enabled: hs.enabled, count: hs.count, alive: hs.alive, fresh: hs.fresh, ageMin: hs.ageMin },
+        ai: {
+          stylist: Q.isConfigured(CFG.qwen.stylist), product: Q.isConfigured(CFG.qwen.product), vision: Q.isConfigured(CFG.qwen.vision),
+          usage: db.usage || {}
+        }
+      } });
     }
     /* Партнёрская обёртка ссылки: frontend зовёт перед открытием магазина. */
     if (m === 'GET' && p === '/api/market/link') {
