@@ -81,7 +81,7 @@ function authUid(req) {
   return u.id;
 }
 /* Публичные ручки (без токена). Всё остальное /api — только со входом. */
-const PUBLIC_API = ['/api/status', '/api/diag', '/api/context', '/api/market/wb/search', '/api/market/ozon/search', '/api/market/link', '/api/collector/push', '/api/collector/status', '/api/collector/reviews', '/api/live/pending', '/api/live/deliver'];
+const PUBLIC_API = ['/api/status', '/api/diag', '/api/diag-report', '/api/context', '/api/market/wb/search', '/api/market/ozon/search', '/api/market/link', '/api/collector/push', '/api/collector/status', '/api/collector/reviews', '/api/live/pending', '/api/live/deliver'];
 
 async function route(req, res) {
   const url = new URL(req.url, 'http://x');
@@ -420,6 +420,23 @@ async function route(req, res) {
         return send(res, 200, { ok: true, data: { status: 'done', items: job.items } });
       }
       return send(res, 404, { ok: false, error: 'Не найдено' });
+    }
+    /* Отчёт расширения для разработчика: лог без секретов (ключ никогда не пишем).
+       POST — по секрету коллектора, чтение — публично (там только техлоги). */
+    if (m === 'POST' && p === '/api/collector/diag-report') {
+      const key = String(req.headers['x-collector-key'] || '');
+      if (!process.env.COLLECTOR_KEY || key !== process.env.COLLECTOR_KEY)
+        return send(res, 403, { ok: false, code: 'AUTH', error: 'Нет доступа' });
+      const b = await readBody(req);
+      const text = String((b && b.text) || '').slice(0, 4000);
+      if (!text) return send(res, 400, { ok: false, error: 'Пусто' });
+      setCache('diag', 'last', { text, ts: Date.now() });
+      return send(res, 200, { ok: true });
+    }
+    if (m === 'GET' && p === '/api/diag-report') {
+      const hit = getCache('diag', 'last', 24 * 3600 * 1000);
+      if (!hit) return send(res, 404, { ok: false, error: 'Отчётов пока нет' });
+      return send(res, 200, { ok: true, data: hit });
     }
     /* Самодиагностика для кнопки в расширении: что настроено, что живо. */
     if (m === 'GET' && p === '/api/diag') {

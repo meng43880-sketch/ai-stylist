@@ -389,8 +389,31 @@ async function selfTest() {
   finally { if (mine && tabId) { try { await chrome.tabs.remove(tabId); } catch (e) {} } }
   await line('=== конец ===');
 }
+/* Отчёт разработчику: версия, backend-хост (без ключа!), лог, диагностика. */
+async function sendReport() {
+  try {
+    const cfg = await chrome.storage.local.get(['backend', 'key', 'log']);
+    const backend = (cfg.backend || '').replace(/\/$/, '');
+    if (!backend || !cfg.key) { await log('Нет backend/key'); return; }
+    let diag = '';
+    try {
+      const r = await fetch(backend + '/api/diag');
+      const j = await r.json();
+      const d = (j && j.data) || {};
+      diag = `srv: aiMode=${d.aiMode} data=${d.dataSource} funnel=${d.wbFunnel} bridge=${d.collector && d.collector.count}/${d.collector && d.collector.alive}`;
+    } catch (e) { diag = 'srv: ERR ' + e.message; }
+    const text = `ext v${chrome.runtime.getManifest().version} | ${diag}\n` + ((cfg.log || []).join('\n')).slice(-2500);
+    const r = await fetch(backend + '/api/collector/diag-report', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-collector-key': cfg.key },
+      body: JSON.stringify({ text })
+    });
+    await log(r.ok ? 'Отчёт отправлен' : 'Отчёт не ушёл: HTTP ' + r.status);
+  } catch (e) { await log('Отчёт ERR ' + e.message); }
+}
 chrome.runtime.onMessage.addListener((m, sender, sendResponse) => {
   if (m && m.type === 'collect') { runCollect().finally(() => pollRelay()); return; }
+  if (m && m.type === 'report') { sendReport(); return; }
   if (m && m.type === 'selftest') { selfTest(); return; }
   if (m && m.type === 'heal') { healPhotos(); return; }
   if (m && m.type === 'pollRelay') { pollRelay(); return; }

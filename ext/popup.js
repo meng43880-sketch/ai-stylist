@@ -33,4 +33,9 @@ const $ = (id) => document.getElementById(id);
     chrome.runtime.sendMessage({ type: 'selftest' });
     await draw();
   };
+  $('report').onclick = async () => {
+    await chrome.storage.local.set({ backend: $('backend').value.trim(), key: $('key').value.trim() });
+    chrome.runtime.sendMessage({ type: 'report' });
+    await draw();
+  };
 })();
