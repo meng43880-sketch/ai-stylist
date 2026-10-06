@@ -34,6 +34,13 @@ function authRateOk(ip) {
   arr.push(now); authHits.set(ip, arr);
   return arr.length <= 10;
 }
+/* Сравнение секретов без учёта невидимого мусора копипасты
+   (пробелы, NBSP, zero-width, BOM) с обеих сторон. */
+function secretsEqual(a, b) {
+  const clean = (s) => String(s || '').replace(/[\s\u200B-\u200D\uFEFF]/g, '');
+  const x = clean(a), y = clean(b);
+  return x.length > 0 && x === y;
+}
 function send(res, code, obj) {
   const body = JSON.stringify(obj);
   res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Length': Buffer.byteLength(body) });
@@ -345,7 +352,7 @@ async function route(req, res) {
         return send(res, 200, { ok: true, data: st });
       }
       const key = String(req.headers['x-collector-key'] || '');
-      if (!process.env.COLLECTOR_KEY || key !== process.env.COLLECTOR_KEY)
+      if (!process.env.COLLECTOR_KEY || !secretsEqual(key, process.env.COLLECTOR_KEY))
         return send(res, 403, { ok: false, code: 'AUTH', error: 'Нет доступа' });
       if (!HF.enabled()) return send(res, 503, { ok: false, code: 'DISABLED', error: 'Мост выключен (COLLECTOR_ENABLED)' });
       const b = await readBody(req);
@@ -357,7 +364,7 @@ async function route(req, res) {
     /* Отзывы с карточки (расширение, секрет): сырьё для AI-комментария. */
     if (m === 'POST' && p === '/api/collector/reviews') {
       const key = String(req.headers['x-collector-key'] || '');
-      if (!process.env.COLLECTOR_KEY || key !== process.env.COLLECTOR_KEY)
+      if (!process.env.COLLECTOR_KEY || !secretsEqual(key, process.env.COLLECTOR_KEY))
         return send(res, 403, { ok: false, code: 'AUTH', error: 'Нет доступа' });
       const b = await readBody(req);
       const pid = String(b.productId || '').slice(0, 40);
@@ -383,7 +390,7 @@ async function route(req, res) {
       const now = Date.now();
       for (const [k, v] of liveQ) if (now - v.ts > 3 * 60 * 1000) liveQ.delete(k);
       if ((p === '/api/live/pending' || p === '/api/live/deliver')
-        && (!process.env.COLLECTOR_KEY || String(req.headers['x-collector-key'] || '') !== process.env.COLLECTOR_KEY))
+        && (!process.env.COLLECTOR_KEY || !secretsEqual(req.headers['x-collector-key'], process.env.COLLECTOR_KEY)))
         return send(res, 403, { ok: false, code: 'AUTH', error: 'Нет доступа' });
       if (m === 'POST' && p === '/api/live/request') {
         const b = await readBody(req);
@@ -425,7 +432,7 @@ async function route(req, res) {
        POST — по секрету коллектора, чтение — публично (там только техлоги). */
     if (m === 'POST' && p === '/api/collector/diag-report') {
       const key = String(req.headers['x-collector-key'] || '');
-      if (!process.env.COLLECTOR_KEY || key !== process.env.COLLECTOR_KEY)
+      if (!process.env.COLLECTOR_KEY || !secretsEqual(key, process.env.COLLECTOR_KEY))
         return send(res, 403, { ok: false, code: 'AUTH', error: 'Нет доступа' });
       const b = await readBody(req);
       const text = String((b && b.text) || '').slice(0, 4000);
