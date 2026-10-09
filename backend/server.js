@@ -232,7 +232,8 @@ async function route(req, res) {
           return send(res, 404, { ok: false, code: 'NO_REVIEWS', error: 'Отзывов пока нет' });
         try {
           const out = await O.reviewComment(pm[1], raw.reviews);
-          setCache('reviewcm', pm[1], out);
+          /* Пустой комментарий не кешируем: иначе «тихо» залипнет на 7 дней. */
+          if (out && out.comment) setCache('reviewcm', pm[1], out);
           return send(res, 200, { ok: true, data: out });
         } catch (e) {
           /* AI чихнул — отдаём честные цифры вместо 500, фронт допросит позже. */

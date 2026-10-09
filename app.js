@@ -142,7 +142,7 @@ const WBClient = {
     const old = Math.round((raw.priceU != null ? raw.priceU : raw.price) / 100) || price;
     const sizes = (raw.sizes || []).map((x) => String((x && (x.origName || x.name)) || x)).filter((x) => x && x.length <= 8).slice(0, 8);
     return {
-      id: 'wb' + id, title: String(raw.name || 'Товар Wildberries').slice(0, 120),
+      id: 'wb' + id, nmId: id, title: String(raw.name || 'Товар Wildberries').slice(0, 120),
       price, old: old > price ? old : Math.round(price * 1.2),
       img: this.photo(id), mp: 'WB', brand: String(raw.brand || '').slice(0, 40),
       cat: this.cat(raw.name), colors: this.colors((raw.colors || []).map((c) => (c && c.name) || c)),
@@ -231,7 +231,7 @@ const NEED_AUTH = ['home', 'results', 'product', 'outfit', 'outfits', 'favorites
 function go(route, params) {
   if (!S.token && NEED_AUTH.includes(route)) { route = 'auth'; params = {}; }
   /* Ушли с карточки — вкладку WB можно закрывать (до этого живёт). */
-  if (S.route === 'product' && route !== 'product') { try { extCloseProduct(); } catch (e) {} }
+  if (S.route === 'product' && route !== 'product') { try { extCloseProduct(); } catch (e) {} try { window.__extOpenNm = null; } catch (e) {} }
   S.route = route; S.params = params || {}; render(); const a = $('#app'); if (a) a.scrollTop = 0;
 }
 window.go = go;
@@ -994,7 +994,10 @@ function renderLiveProduct(p) {
     <p class="sub">Точное наличие — на странице товара в магазине, мы его не копируем.</p>
     <div style="height:150px"></div>
     <div class="cta"><button class="btn" onclick="market('${p.id}')">Купить на Wildberries ${ic('upRight', 16)}</button></div>`;
-  if (p.nmId) extOpenProduct(p.nmId);
+  /* nmId может отсутствовать у старых кешей: выводим из id вида wb123. */
+  const nm = p.nmId || (/^wb\d+$/.test(String(p.id || '')) ? String(p.id).replace(/^wb/, '') : '');
+  /* Не дёргаем вкладку повторно: повторный рендер (лайк и т.п.) убивал бы идущий скрап. */
+  if (nm && window.__extOpenNm !== p.id) { window.__extOpenNm = p.id; extOpenProduct(nm); }
   __loadFactors(p.id, true);
 }
 /* Ленивые факторы карточки + ряд Отзывы. Вызывается только открытием карточки. */

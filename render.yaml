@@ -28,5 +28,7 @@ services:
         value: z-ai/glm-5.3-flash
       - key: ZVENO_API_KEY
         sync: false
+      - key: COLLECTOR_KEY
+        sync: false
       - key: DATABASE_URL
         sync: false
