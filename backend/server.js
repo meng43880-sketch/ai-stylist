@@ -88,7 +88,7 @@ function authUid(req) {
   return u.id;
 }
 /* Публичные ручки (без токена). Всё остальное /api — только со входом. */
-const PUBLIC_API = ['/api/status', '/api/diag', '/api/diag-report', '/api/context', '/api/market/wb/search', '/api/market/ozon/search', '/api/market/link', '/api/collector/push', '/api/collector/status', '/api/collector/reviews', '/api/live/pending', '/api/live/deliver'];
+const PUBLIC_API = ['/api/status', '/api/diag', '/api/diag-report', '/api/context', '/api/market/wb/search', '/api/market/ozon/search', '/api/market/link', '/api/collector/push', '/api/collector/status', '/api/collector/reviews', '/api/collector/diag-report', '/api/live/pending', '/api/live/deliver'];
 
 async function route(req, res) {
   const url = new URL(req.url, 'http://x');
