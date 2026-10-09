@@ -225,21 +225,30 @@ async function route(req, res) {
       if (pm[2] === '/explanation') return send(res, 200, { ok: true, data: await O.explainProduct(pm[1], null, uid) });
       /* review-comment — раньше проверки товара: отзывов может не быть вовсе. */
       if (pm[2] === '/review-comment') {
-        const hitC = getCache('reviewcm', pm[1], 7 * 24 * 3600 * 1000);
-        if (hitC) return send(res, 200, { ok: true, data: hitC });
         const raw = getCache('reviews', pm[1], 30 * 24 * 3600 * 1000);
         if (!raw || !(raw.reviews || []).length)
           return send(res, 404, { ok: false, code: 'NO_REVIEWS', error: 'Отзывов пока нет' });
+        /* Хеш выборки: после перепуша отзывов старый комментарий инвалидируется,
+           ключ «только productId» больше не залипает на неделю. */
+        let revHash = String((raw.reviews || []).length) + ':';
+        try {
+          let h = 0;
+          const s = (raw.reviews || []).map((r) => String(r.rating || 0) + (r.text || '').slice(0, 40)).join('|');
+          for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+          revHash += (h >>> 0).toString(36);
+        } catch (e) { revHash += 'x'; }
+        const hitC = getCache('reviewcm', pm[1], 7 * 24 * 3600 * 1000);
+        if (hitC && hitC.revHash === revHash) return send(res, 200, { ok: true, data: hitC });
         try {
           const out = await O.reviewComment(pm[1], raw.reviews);
           /* Пустой комментарий не кешируем: иначе «тихо» залипнет на 7 дней. */
-          if (out && out.comment) setCache('reviewcm', pm[1], out);
+          if (out && out.comment) setCache('reviewcm', pm[1], Object.assign({}, out, { revHash }));
           return send(res, 200, { ok: true, data: out });
         } catch (e) {
           /* AI чихнул — отдаём честные цифры вместо 500, фронт допросит позже. */
-          const rs = raw.reviews || [];
-          const avg = rs.length ? Math.round((rs.reduce((a, r) => a + (r.rating || 0), 0) / rs.length) * 10) / 10 : 0;
-          return send(res, 200, { ok: true, data: { productId: pm[1], source: 'signals', count: rs.length, avg, comment: null } });
+          const rs = (raw.reviews || []).filter((r) => (r.rating || 0) >= 1 && (r.rating || 0) <= 5);
+          const avg = rs.length ? Math.round((rs.reduce((a, r) => a + r.rating, 0) / rs.length) * 10) / 10 : null;
+          return send(res, 200, { ok: true, data: { productId: pm[1], source: 'signals', count: (raw.reviews || []).length, rated: rs.length, avg, comment: null } });
         }
       }
       if (pm[2] === '/availability') {

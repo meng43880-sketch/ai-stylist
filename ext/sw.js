@@ -314,16 +314,24 @@ async function openProduct(nmId) {
       await sleep(1000);
     }
     await sleep(2500); // дать карточке и отзывам отрисоваться
-    let reviews = [], via = '?', dbg = '';
+    let reviews = [], via = '?', dbg = '', ratingsOk = true, hasSummary = false;
     try {
       const res = await chrome.tabs.sendMessage(__productTab, { type: 'scrapeReviews' });
       if (res && res.ok) {
         reviews = (res.reviews || []).slice(0, 30); via = res.via || '?';
+        ratingsOk = res.ratingsOk !== false; hasSummary = !!res.hasSummary;
         if (res.debug) dbg = ' | ' + JSON.stringify(res.debug).slice(0, 160);
       }
     } catch (e) { dbg = ' | msg-err'; }
     await log('карточка ' + id + ': отзывов ' + reviews.length + ' (' + via + ')' + dbg);
     if (!reviews.length) return;
+    /* Проверка перед пушем: мусор молча не отправляем. */
+    const rated = reviews.filter((r) => (r.rating || 0) > 0).length;
+    if (rated < Math.max(2, Math.ceil(reviews.length * 0.4)) || !ratingsOk) {
+      await log('оценки не распознаны (' + rated + '/' + reviews.length + ') — не пушу, чини селекторы');
+      return;
+    }
+    if (hasSummary) await log('внимание: на странице есть AI-сводка WB — вычищена из выборки');
     const cfg = await chrome.storage.local.get(['backend', 'key']);
     if (!cfg.backend || !cfg.key) { await log('push отзывов: нет backend/key в попапе'); return; }
     try {

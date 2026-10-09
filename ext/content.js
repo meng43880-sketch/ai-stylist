@@ -115,21 +115,66 @@ function reviewsFromLd() {
   } catch (e) {}
   return out;
 }
-function ratingNear(el) {
+/* AI-сводка WB — не отзыв: «нейросеть», «по мнению покупателей» и т.п. */
+const RV_SUMMARY_RX = /нейросеть|по мнению покупателей|в двух словах|\bсводка\b|ai-сводка/i;
+const RV_SELLER_RX = /ответ продавца|официальный представитель/i;
+function summaryRoots() {
+  const roots = [];
+  try {
+    document.querySelectorAll('div,section,aside').forEach((el) => {
+      const t = String((el.innerText || '').split('\n')[0] || '').slice(0, 140);
+      if (t.length > 10 && RV_SUMMARY_RX.test(t)) roots.push(el);
+    });
+  } catch (e) {}
+  return roots;
+}
+function inRoots(el, roots) {
+  try { for (const r of roots) if (r.contains(el)) return true; } catch (e) {}
+  return false;
+}
+function sellerScope(el) {
+  try {
+    const scope = el.closest ? (el.closest('[class*="feedback"],[class*="comment"],li,article') || el) : el;
+    if (scope.querySelector('[class*="seller"],[class*="answer"],[class*="merchant"]')) return true;
+    const t = String((scope.innerText || scope.textContent || '')).slice(0, 250);
+    if (RV_SELLER_RX.test(t)) return true;
+  } catch (e) {}
+  return false;
+}
+function ratingFromStars(el) {
   try {
     const scope = el.closest ? (el.closest('[class*="feedback"],[class*="comment"],[class*="review"],li,article,div') || el) : el;
-    const cand = [
-      scope.querySelector('.comment__rating'), scope.querySelector('.feedback__rating'),
-      scope.querySelector('[class*="star"]'), scope.querySelector('[aria-label*="ценк"]'),
-      scope.querySelector('[aria-label*="звезд"]')
-    ].filter(Boolean)[0];
-    if (cand) {
-      const m = String(cand.getAttribute('class') + ' ' + cand.getAttribute('aria-label') + ' ' + (cand.textContent || '')).match(/([1-5])/);
+    /* 1) явные data-атрибуты */
+    const rated = scope.querySelector('[data-rate],[data-rating],[data-score],[data-stars]');
+    if (rated) {
+      const v = parseInt(rated.getAttribute('data-rate') || rated.getAttribute('data-rating') || rated.getAttribute('data-score') || rated.getAttribute('data-stars'), 10);
+      if (v >= 1 && v <= 5) return v;
+    }
+    /* 2) считаем закрашенные звёзды внутри карточки */
+    const stars = [...scope.querySelectorAll('[class*="star"]')].filter((s) => !s.querySelector('[class*="star"]'));
+    if (stars.length >= 3 && stars.length <= 10) {
+      const filled = stars.filter((s) => /fill|active|\bon\b|full|selected|checked|rated|grade/i.test(String(s.getAttribute('class') || ''))).length;
+      if (filled >= 1 && filled <= 5) return filled;
+    }
+    /* 3) aria-подписи */
+    const lab = scope.querySelector('[aria-label*="ценк"],[aria-label*="звезд"],[aria-label*="оценк"]');
+    if (lab) {
+      const m = String(lab.getAttribute('aria-label') || '').match(/([1-5])/);
       if (m) return +m[1];
     }
+    /* 4) запасной вариант: явная «оценка N» текстом */
     const t = String((scope.innerText || scope.textContent || '')).slice(0, 300);
     const m2 = t.match(/оценка\s*([1-5])/i);
     if (m2) return +m2[1];
+  } catch (e) {}
+  return 0;
+}
+function helpfulNear(el) {
+  try {
+    const scope = el.closest ? (el.closest('[class*="feedback"],[class*="comment"],li,article') || el) : el;
+    const t = String((scope.innerText || scope.textContent || '')).slice(0, 600);
+    const m = t.match(/полезно\D{0,12}(\d{1,4})|(\d{1,4})\D{0,12}полезно/i);
+    if (m) return parseInt(m[1] || m[2], 10) || 0;
   } catch (e) {}
   return 0;
 }
@@ -154,14 +199,19 @@ async function scrapeReviews() {
     if (head) { head.scrollIntoView({ block: 'start' }); await HSLEEP(1500); }
   } catch (e) {}
   const out = [], seen = new Set();
-  /* Отсекаем не-отзывы: вопросы, кнопки, служебные фразы — иначе AI врёт по мусору. */
+  const sumRoots = summaryRoots();
+  const hasSummary = sumRoots.length > 0;
+  /* Отсекаем не-отзывы: вопросы, кнопки, служебные фразы, AI-сводку WB,
+     ответы продавца — иначе AI врёт по мусору. */
   const JUNK = /^(показать|ответить|пожаловаться|полезно|не полезно|написать|свернуть|развернуть|ещё|еще|все|читать)/i;
   const push = (t, el) => {
     t = String(t || '').replace(/\s+/g, ' ').trim();
     if (t.length < 25 || t.length > 1200 || seen.has(t.slice(0, 60))) return;
     if (JUNK.test(t) || /\?$/.test(t)) return;
+    if (RV_SUMMARY_RX.test(t.slice(0, 200))) return;
+    if (el && (inRoots(el, sumRoots) || sellerScope(el))) return;
     seen.add(t.slice(0, 60));
-    out.push({ text: t.slice(0, 500), rating: el ? ratingNear(el) : 0 });
+    out.push({ text: t.slice(0, 500), rating: el ? ratingFromStars(el) : 0, helpful: el ? helpfulNear(el) : 0, ord: out.length });
   };
   const collectOnce = () => {
     const found = pick(['.comment__text', '.feedback__text', '.feedback__content', '[data-testid="feedback-text"]', '.comments-list__text', '.comment-text', '.review-text']);
@@ -170,11 +220,18 @@ async function scrapeReviews() {
       if (out.length >= 5) return 'dom:' + found.sel;
     }
     try {
-      const all = [...document.querySelectorAll('[class]')].filter((el) => {
+      let all = [...document.querySelectorAll('[class]')].filter((el) => {
         const c = String(el.getAttribute('class') || '');
         /* ОСТОРОЖНО: 'list'/'block' убивают comments-list__item и feedback-block —
            исключаем только явные обёртки страницы. */
         return /comment|feedback|review|opinion|otzyv/i.test(c) && !/container|wrapper|section|wrap|page|modal|header|footer/i.test(c);
+      });
+      /* Leaf-only: родитель, внутри которого есть другой кандидат, — не отзыв,
+         иначе склеиваются соседние карточки. */
+      const set = new Set(all);
+      all = all.filter((el) => {
+        for (const o of set) if (o !== el && el.contains(o)) return false;
+        return true;
       });
       all.slice(0, 140).forEach((el) => push(el.innerText || el.textContent, el));
       if (out.length >= 5) return 'generic';
@@ -228,8 +285,29 @@ async function scrapeReviews() {
     via = collectOnce() || via;
     if (out.length <= before) break;
   }
-  if (out.length) return { reviews: out.slice(0, 30), via: via || 'generic', debug };
-  if (ld.length) return { reviews: ld, via: 'ld-few', debug };
+  /* Выборка: самые полезные + начало и конец ленты + низкие оценки —
+     иначе видим только первую страницу сортировки по умолчанию. */
+  const sampleReviews = (arr) => {
+    const useful = [...arr].sort((a, b) => (b.helpful || 0) - (a.helpful || 0)).slice(0, 12);
+    const head = arr.slice(0, 12);
+    const tail = arr.slice(-6);
+    const low = arr.filter((r) => r.rating >= 1 && r.rating <= 2).slice(0, 6);
+    const got = new Set(), res = [];
+    [useful, head, tail, low].forEach((g) => g.forEach((r) => {
+      const k = String(r.text || '').slice(0, 60);
+      if (!got.has(k)) { got.add(k); res.push(r); }
+    }));
+    return res.slice(0, 30);
+  };
+  const rateFlag = (arr) => {
+    const rated = arr.filter((r) => (r.rating || 0) > 0).length;
+    return { rated, ratingsOk: arr.length > 0 && rated >= Math.max(2, Math.ceil(arr.length * 0.4)) };
+  };
+  if (out.length) {
+    const smp = sampleReviews(out);
+    return Object.assign({ reviews: smp, via: via || 'generic', debug, hasSummary }, rateFlag(smp));
+  }
+  if (ld.length) return { reviews: ld, via: 'ld-few', debug, hasSummary };
   let bodyHas = false, candCount = 0;
   try {
     bodyHas = /отзыв/i.test(document.body ? document.body.innerText.slice(0, 20000) : '');
@@ -241,7 +319,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg && msg.type === 'wbPing') { sendResponse({ ok: true }); return; }
   if (msg && msg.type === 'scrapeReviews') {
     scrapeReviews()
-      .then((r) => sendResponse({ ok: true, reviews: r.reviews || [], via: r.via || '?', debug: r.debug || null }))
+      .then((r) => sendResponse({ ok: true, reviews: r.reviews || [], via: r.via || '?', debug: r.debug || null, ratingsOk: r.ratingsOk !== false, hasSummary: !!r.hasSummary }))
       .catch((e) => sendResponse({ ok: false, error: String((e && e.message) || e) }));
     return true;
   }

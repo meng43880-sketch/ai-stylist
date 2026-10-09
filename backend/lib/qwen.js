@@ -106,7 +106,7 @@ async function chatComplete(provider, { messages, tools, temperature, timeoutMs,
 const lastUsed = {};
 function getLastModel(tag) { return (tag && lastUsed[tag]) || ''; }
 /* chatJSON: structured output с валидацией и одной повторной попыткой. */
-async function chatJSON(provider, { system, user, images, required, retries, tag, maxTokens }) {
+async function chatJSON(provider, { system, user, images, required, retries, tag, maxTokens, temperature }) {
   if (!isConfigured(provider)) throw err('NOT_CONFIGURED', 'AI-провайдер не настроен');
   const content = [{ type: 'text', text: user }];
   (images || []).forEach((u) => content.push({ type: 'image_url', image_url: { url: u } }));
@@ -114,7 +114,7 @@ async function chatJSON(provider, { system, user, images, required, retries, tag
   let last;
   for (let i = 0; i < (retries == null ? 1 : retries) + 1; i++) {
     try {
-      const msg = await chatComplete(provider, { messages, tag, maxTokens });
+      const msg = await chatComplete(provider, { messages, tag, maxTokens, temperature });
       const obj = extractJSON(msg.content || '');
       if (required && required.length) {
         const miss = required.filter((k) => obj[k] === undefined);

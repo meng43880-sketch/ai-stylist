@@ -606,37 +606,63 @@ async function explainProduct(productId, bodyProduct, uid) {
     note: 'Оценки — эвристика sainvio под твой профиль, а не объективная метрика качества.'
   };
 }
-/* AI-комментарий по живым отзывам (§21, §34): 2–3 предложения по-русски,
+/* Частоты тем считаются словарём в коде — модель только формулирует.
+   Иначе маленькая модель выдумывает числа и путает сводку WB с отзывами. */
+const RV_THEMES = [
+  { key: 'size', label: 'размер', re: /маломер|большемер|маленьк|велик|тесно|узко|широко|в размер|размерн/i },
+  { key: 'thin', label: 'тонкая ткань', re: /тонк|просвечива|синтетик|полиэстер|дешев/i },
+  { key: 'seams', label: 'швы и брак', re: /\bшов|нитк|торч|брак|дыр|пятн|крив/i },
+  { key: 'color', label: 'цвет не как на фото', re: /цвет.{0,25}(не|другой)|не тот цвет|не как на фото|отличается/i },
+  { key: 'wash', label: 'садится при стирке', re: /стирк|сел[ао]? (после|при)|линя|катышк/i },
+  { key: 'good', label: 'хвалят качество', re: /хорош|отличн|качествен|удобн|мягк|приятн|довольн|рекомендую/i }
+];
+function rvStats(list) {
+  /* Оценка 0 = «не распознана»: в счёт не идёт, а не падает в «отрицательные». */
+  const rated = list.filter((r) => (r.rating || 0) >= 1 && (r.rating || 0) <= 5);
+  const pos = rated.filter((r) => r.rating >= 4).length;
+  const neg = rated.filter((r) => r.rating <= 2).length;
+  const avg = rated.length ? Math.round((rated.reduce((a, r) => a + r.rating, 0) / rated.length) * 10) / 10 : null;
+  const themes = RV_THEMES.map((t) => {
+    const hits = list.filter((r) => t.re.test(r.text || '')).length;
+    return { key: t.key, label: t.label, n: hits };
+  }).filter((t) => t.n > 0).sort((a, b) => b.n - a.n);
+  return { rated: rated.length, pos, neg, avg, themes };
+}
+/* AI-комментарий по живым отзывам (§21, §34): короткий вердикт по-русски,
    только повторяющиеся моменты; мало данных — честно короче. */
 async function reviewComment(productId, reviews) {
   const list = (reviews || []).slice(0, 30);
-  const sum = list.reduce((a, r) => a + (r.rating || 0), 0);
-  const avg = list.length ? Math.round((sum / list.length) * 10) / 10 : 0;
-  if (!Q.isConfigured(CFG.qwen.product)) {
-    const pos = list.filter((r) => (r.rating || 0) >= 4).length;
-    return {
-      productId, source: 'signals', count: list.length, avg,
-      comment: list.length
-        ? `По отзывам на WB: средняя оценка ${avg} из 5, хвалебных ${pos} из ${list.length}. Детали — на странице товара.`
-        : null
-    };
-  }
-  const t0 = Date.now();
-  const pos = list.filter((r) => (r.rating || 0) >= 4).length;
-  const neg = list.filter((r) => (r.rating || 0) <= 2).length;
-  const body = list.map((r, i) => `${i + 1}. [${r.rating || '?'}] ${r.text}`).join('\n').slice(0, 6000);
-  const obj = await Q.chatJSON(CFG.qwen.product, {
-    system: `You read Russian marketplace reviews (${list.length} total, ${pos} positive 4-5, ${neg} negative 1-2). Reply STRICT JSON: {comment: "4-6 sentences in Russian. Start with numbers (how many of how many praise what). Cover: fit/sizing, quality/material, defects/complaints. If reviews contradict each other, say what the majority thinks AND note the disagreement explicitly. Every claim must trace to the texts below — never invent details, brands, or facts not present", pros: [up to 3 short phrases], cons: [up to 3 short phrases]}. No advertising tone, no generic filler.`,
-    user: `Reviews:\n${body}`,
-    required: [], tag: 'product', maxTokens: 600
-  });
-  const out = {
-    productId, source: 'qwen-product', count: list.length, avg,
-    comment: pickStr(obj, ['comment', 'summary', 'text', 'response']),
-    pros: Array.isArray(obj.pros) ? obj.pros.map(String).slice(0, 3) : [],
-    cons: Array.isArray(obj.cons) ? obj.cons.map(String).slice(0, 2) : []
+  const st = rvStats(list);
+  const topLine = st.themes.slice(0, 3).map((t) => `${t.label} (${t.n})`).join(', ');
+  const fallback = {
+    productId, source: 'signals', count: list.length, rated: st.rated, avg: st.avg,
+    comment: list.length
+      ? `${list.length} отзывов${st.avg ? `, средняя ${st.avg}` : ''}${topLine ? `. Чаще пишут: ${topLine}.` : '. Детали — на странице товара.'}`
+      : null,
+    pros: [], cons: st.themes.filter((t) => t.key !== 'good').slice(0, 2).map((t) => t.label),
+    size: 'нет данных', themes: st.themes
   };
-  logHistory('ai', `reviewcm ${Q.getLastModel('product') || CFG.qwen.product.model} ${Date.now() - t0}ms ${productId}`);
+  if (!Q.isConfigured(CFG.qwen.product)) return fallback;
+  const t0 = Date.now();
+  const quotes = list.filter((r) => (r.rating || 0) > 0).slice(0, 8)
+    .map((r, i) => `${i + 1}. [${r.rating}] ${String(r.text || '').slice(0, 160)}`).join('\n');
+  const obj = await Q.chatJSON(CFG.qwen.product, {
+    system: 'Ты пишешь итог по русским отзывам Wildberries. Отвечай СТРОГО JSON: {"verdict":"главный итог, до 12 слов","pros":["2-3 плюса, каждый до 4 слов"],"cons":["2-3 минуса, каждый до 4 слов"],"size":"одно из: маломерит, в размер, большемерит, нет данных"}. Только русский язык, ни одного английского слова. Цифры бери только из блока СТАТИСТИКА ниже — ничего не выдумывай.',
+    user: `СТАТИСТИКА: всего отзывов ${list.length}, с оценкой ${st.rated}, средняя ${st.avg == null ? 'неизвестна' : st.avg}. Позитивных (4-5): ${st.pos}, негативных (1-2): ${st.neg}. Частые темы: ${topLine || 'нет'}. ЦИТАТЫ:\n${quotes}`.slice(0, 4000),
+    required: ['verdict', 'pros', 'cons', 'size'], tag: 'product', maxTokens: 150, temperature: 0.1
+  });
+  /* Проверка ответа: кириллица, размер из справочника, длина в рамках. */
+  const verdict = pickStr(obj, ['verdict', 'comment', 'summary', 'text', 'response']);
+  const sizes = ['маломерит', 'в размер', 'большемерит', 'нет данных'];
+  const size = sizes.includes(String(obj.size || '').trim().toLowerCase()) ? String(obj.size).trim().toLowerCase() : 'нет данных';
+  const clean = (a) => (Array.isArray(a) ? a.map((s) => String(s).trim()).filter((s) => s && /[а-яё]/i.test(s) && s.split(/\s+/).length <= 5).slice(0, 3) : []);
+  const pros = clean(obj.pros), cons = clean(obj.cons);
+  const bad = !verdict || !/[а-яё]/i.test(verdict) || verdict.length > 200 || /[a-z]{4,}/i.test(verdict);
+  const out = bad ? fallback : {
+    productId, source: 'qwen-product', count: list.length, rated: st.rated, avg: st.avg,
+    comment: verdict, pros, cons, size, themes: st.themes
+  };
+  logHistory('ai', `reviewcm ${Q.getLastModel('product') || CFG.qwen.product.model} ${Date.now() - t0}ms ${productId}${bad ? ' FALLBACK' : ''}`);
   return out;
 }
 module.exports = { analyzePhoto, describeItem, productAnalysis, searchPipeline, scoreCtx, structFromIntent, chat, getWeather, demoVision, explainProduct, reviewComment };

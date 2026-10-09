@@ -1023,7 +1023,12 @@ window.__loadFactors = async function (id, isLive) {
     el.innerHTML = `<div class="whyrow"><div><b>Не посчиталось</b><span>Проверь соединение и зайди снова.</span></div></div>`;
   }
 };
-/* Опрос длиннее скрапа (12×10с): отзывы приезжают позже открытия карточки. */
+/* Опрос длиннее скрапа (12×10с): отзывы приезжают позже открытия карточки.
+   Статусы честные: ждём расширение / отзывы получены, пишем вывод / тихо. */
+function revRowStatus(html) {
+  const el = document.getElementById('revrow');
+  if (el && S.route === 'product') el.innerHTML = `<div><b>Отзывы</b><span>${html}</span></div>`;
+}
 async function pollReviewComment(id) {
   for (let i = 0; i < 12; i++) {
     try {
@@ -1031,28 +1036,35 @@ async function pollReviewComment(id) {
       if (r.data && r.data.comment) {
         const el = document.getElementById('revrow');
         if (el && S.route === 'product') {
-          const pros = (r.data.pros || []).filter(Boolean).map(esc).join(' · ');
-          const cons = (r.data.cons || []).filter(Boolean).map(esc).join(' · ');
-          el.innerHTML = `<div><b>Отзывы · ${r.data.count || ''}${r.data.avg ? ` · средняя ${r.data.avg}` : ''}</b>`
-            + `<span>${esc(r.data.comment)}</span>`
-            + (pros ? `<span style="color:#0A7D4B">Плюсы: ${pros}</span>` : '')
-            + (cons ? `<span style="color:#B3261E">Минусы: ${cons}</span>` : '') + `</div>`;
+          const d = r.data;
+          const pros = (d.pros || []).filter(Boolean).map(esc).join(' · ');
+          const cons = (d.cons || []).filter(Boolean).map(esc).join(' · ');
+          const nm = String(id || '').replace(/^wb/, '').replace(/\D/g, '');
+          el.innerHTML = `<div><b>Отзывы · ★ ${d.avg == null ? '—' : d.avg} · ${d.count || ''}</b>`
+            + `<span>${esc(d.comment)}</span>`
+            + (d.size && d.size !== 'нет данных' ? `<span>Размер: ${esc(d.size)}</span>` : '')
+            + (pros ? `<span style="color:#0A7D4B">Хвалят: ${pros}</span>` : '')
+            + (cons ? `<span style="color:#B3261E">Ругают: ${cons}</span>` : '')
+            + (nm ? `<span><a href="https://www.wildberries.ru/catalog/${nm}/detail.aspx" target="_blank" rel="noopener">Подробнее на WB →</a></span>` : '') + `</div>`;
         }
         return;
       }
-    } catch (e) {}
+      if (r.data && (r.data.count || r.data.rated)) revRowStatus('Отзывы получены, пишем вывод…');
+      else revRowStatus('Ждём расширение — открой карточку товара во вкладке WB…');
+    } catch (e) {
+      if (e && (e.code === 'NO_REVIEWS' || e.status === 404)) revRowStatus('Отзывов пока нет — ждём расширение…');
+    }
     await new Promise((res) => setTimeout(res, 10000));
     if (!document.getElementById('revrow')) return;
   }
-  const el = document.getElementById('revrow');
-  if (el) el.innerHTML = `<div><b>Отзывы</b><span>Пока тихо — загляни на страницу магазина.</span></div>`;
+  revRowStatus('Пока тихо — загляни на страницу магазина.');
 }
 /* Вернулся на вкладку — а комментарий мог уже приехать: допрашиваем заново. */
 try {
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState !== 'visible' || S.route !== 'product') return;
     const el = document.getElementById('revrow');
-    if (el && /Читаем|тихо/i.test(el.textContent || '') && S.params && S.params.id) pollReviewComment(S.params.id);
+    if (el && /Читаем|тихо|ждём|пишем/i.test(el.textContent || '') && S.params && S.params.id) pollReviewComment(S.params.id);
   });
 } catch (e) {}
 /* Расширению: открыть карточку WB и прочитать отзывы (мост живёт пока читаешь ленту). */
