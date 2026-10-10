@@ -38,7 +38,7 @@ function wbCat(name) {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function log(msg) {
   const o = await chrome.storage.local.get('log');
-  const arr = (o.log || []).concat([new Date().toLocaleTimeString() + ' ' + msg]).slice(-30);
+  const arr = (o.log || []).concat([new Date().toLocaleTimeString() + ' ' + msg]).slice(-70);
   await chrome.storage.local.set({ log: arr });
 }
 /* Вкладка WB для запросов: ищем открытую, иначе открываем фоновую сами.
@@ -323,7 +323,9 @@ async function openProduct(nmId) {
         if (res.debug) dbg = ' | ' + JSON.stringify(res.debug).slice(0, 160);
       }
     } catch (e) { dbg = ' | msg-err'; }
-    await log('карточка ' + id + ': отзывов ' + reviews.length + ' (' + via + ')' + dbg);
+    let extv = '';
+    try { extv = ' [ext v' + chrome.runtime.getManifest().version + ']'; } catch (e) {}
+    await log('карточка ' + id + ': отзывов ' + reviews.length + ' (' + via + ')' + dbg + extv);
     /* Слепок разметки: без него «чини селекторы» — гадание вслепую. */
     const probe = async (why) => {
       try {
@@ -336,7 +338,13 @@ async function openProduct(nmId) {
           if ((p.stars || []).length) await log('probe(' + why + ') stars ' + p.stars.slice(0, 6).join(' || ').slice(0, 400));
           if (p.card) await log('probe(' + why + ') card ' + p.card.slice(0, 500));
           if (p.err) await log('probe(' + why + ') ERR ' + p.err);
-        } else if (pr && pr.error) await log('probe(' + why + ') ERR ' + pr.error);
+        } else if (pr && pr.error) {
+          await log('probe(' + why + ') ERR ' + pr.error);
+        } else {
+          /* content.js на вкладке старый (вкладка открыта до перезагрузки
+             расширения) — раньше это проглатывалось молчанием. */
+          await log('probe(' + why + ') NO-HANDLER — перезагрузи расширение и открой вкладку WB заново');
+        }
       } catch (e) { await log('probe(' + why + ') ERR ' + e.message); }
     };
     if (!reviews.length) { await probe('empty'); return; }
