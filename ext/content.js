@@ -141,46 +141,79 @@ function sellerScope(el) {
   } catch (e) {}
   return false;
 }
+function ratingInScope(scope) {
+  /* 1) явные data-атрибуты */
+  const rated = scope.querySelector('[data-rate],[data-rating],[data-score],[data-stars]');
+  if (rated) {
+    const v = parseInt(rated.getAttribute('data-rate') || rated.getAttribute('data-rating') || rated.getAttribute('data-score') || rated.getAttribute('data-stars'), 10);
+    if (v >= 1 && v <= 5) return v;
+  }
+  /* 2) оценка зашита в класс WB: «stars-line star5».
+     Правило безопасности: берём цифру, только если она одна во всём
+     скоупе. Звёзды-позиции (star1..star5 в линейке) дадут набор
+     1..5 — такой скоуп пропускаем, иначе всегда вернули бы 1. */
+  try {
+    const hits = [];
+    const nodes = [scope].concat([...scope.querySelectorAll('[class]')].slice(0, 120));
+    for (const e of nodes) {
+      const c = String(e.getAttribute('class') || '');
+      const m = c.match(/\bstar(?:s)?[-_ ]?([1-5])\b/i) || c.match(/\b(?:rating|rate|grade|score|count)[-_ ]?([1-5])\b/i);
+      if (m) hits.push({ v: +m[1], c: c });
+    }
+    if (hits.length) {
+      const own = hits.filter((h) => /line|rating|rate|grade|score|count/i.test(h.c));
+      const digits = [...new Set((own.length ? own : hits).map((h) => h.v))];
+      if (digits.length === 1 && digits[0] >= 1 && digits[0] <= 5) return digits[0];
+    }
+  } catch (e) {}
+  /* 3) считаем закрашенные звёзды внутри карточки */
+  const stars = [...scope.querySelectorAll('[class*="star"]')].filter((s) => !s.querySelector('[class*="star"]'));
+  if (stars.length >= 3 && stars.length <= 10) {
+    const filled = stars.filter((s) => /fill|active|\bon\b|full|selected|checked|rated|grade/i.test(String(s.getAttribute('class') || ''))).length;
+    if (filled >= 1 && filled <= 5) return filled;
+    /* 3b) заливка SVG берётся только из явного fill-атрибута:
+       у обычного span computed fill всегда чёрный — это давало
+       ложные пятёрки. */
+    try {
+      let withFill = 0, filledCnt = 0;
+      for (const s of stars) {
+        const shape = s.querySelector('path,polygon,circle,use');
+        const f = String((shape || s).getAttribute('fill') || '');
+        if (!f) continue;
+        withFill++;
+        if (!/^(none|transparent|rgba?\(0,\s*0,\s*0,\s*0\)|#(?:fff|ffffff|e0e0e0|d8d8d8|c7c7c7|c9c9c9|cccccc|f0f0f0|ededed|e5e5e5))$/i.test(f)) filledCnt++;
+      }
+      if (withFill >= 3 && filledCnt >= 1 && filledCnt <= 5) return filledCnt;
+    } catch (e) {}
+  }
+  /* 4) aria-подписи */
+  const lab = scope.querySelector('[aria-label*="ценк"],[aria-label*="звезд"],[aria-label*="оценк"]');
+  if (lab) {
+    const m = String(lab.getAttribute('aria-label') || '').match(/([1-5])/);
+    if (m) return +m[1];
+  }
+  /* 5) запасной вариант: явная «оценка N» / «N из 5» / «★N» текстом */
+  const t = String((scope.innerText || scope.textContent || '')).slice(0, 300);
+  const m2 = t.match(/оценка\s*([1-5])/i) || t.match(/([1-5])\s*из\s*5/) || t.match(/рейтинг\s*([1-5])/i) || t.match(/★\s*([1-5])/);
+  if (m2) return +m2[1];
+  return 0;
+}
 function ratingFromStars(el) {
   try {
-    const scope = el.closest ? (el.closest('[class*="feedback"],[class*="comment"],[class*="review"],li,article,div') || el) : el;
-    /* 1) явные data-атрибуты */
-    const rated = scope.querySelector('[data-rate],[data-rating],[data-score],[data-stars]');
-    if (rated) {
-      const v = parseInt(rated.getAttribute('data-rate') || rated.getAttribute('data-rating') || rated.getAttribute('data-score') || rated.getAttribute('data-stars'), 10);
-      if (v >= 1 && v <= 5) return v;
+    /* Тесный скоуп первым (сам блок отзыва), потом вверх по предкам —
+       так звёзды-соседи текста находятся уже на 1-2 уровне. */
+    const scopes = [];
+    const tight = el.closest ? el.closest('[class*="feedback"],[class*="comment"],[class*="review"],[class*="rating"],li,article') : null;
+    if (tight) scopes.push(tight);
+    let p = el;
+    for (let i = 0; i < 5 && p; i++) { scopes.push(p); p = p.parentElement; }
+    const seen = new Set();
+    for (const scope of scopes) {
+      if (!scope || seen.has(scope)) continue;
+      seen.add(scope);
+      const v = ratingInScope(scope);
+      if (v) return v;
     }
-    /* 2) считаем закрашенные звёзды внутри карточки */
-    const stars = [...scope.querySelectorAll('[class*="star"]')].filter((s) => !s.querySelector('[class*="star"]'));
-    if (stars.length >= 3 && stars.length <= 10) {
-      const filled = stars.filter((s) => /fill|active|\bon\b|full|selected|checked|rated|grade/i.test(String(s.getAttribute('class') || ''))).length;
-      if (filled >= 1 && filled <= 5) return filled;
-      /* 2b) классов нет — различаем заливку SVG: серая = пустая */
-      try {
-        const fills = stars.map((s) => {
-          let f = '';
-          try {
-            const shape = s.querySelector('path,polygon,circle,use') || s;
-            f = String(shape.getAttribute('fill') || '');
-            if (!f && window.getComputedStyle) f = String(window.getComputedStyle(shape).fill || '');
-          } catch (e) {}
-          return f;
-        });
-        const gray = fills.filter((f) => !f || /none|transparent|e0e0e0|d8d8d8|c7c7c7|c9c9c9|cccccc|f0f0f0|ededed|e5e5e5/i.test(f)).length;
-        const fl = fills.length - gray;
-        if (fl >= 1 && fl <= 5 && fills.length >= 3) return fl;
-      } catch (e) {}
-    }
-    /* 3) aria-подписи */
-    const lab = scope.querySelector('[aria-label*="ценк"],[aria-label*="звезд"],[aria-label*="оценк"]');
-    if (lab) {
-      const m = String(lab.getAttribute('aria-label') || '').match(/([1-5])/);
-      if (m) return +m[1];
-    }
-    /* 4) запасной вариант: явная «оценка N» / «N из 5» / «★N» текстом */
-    const t = String((scope.innerText || scope.textContent || '')).slice(0, 300);
-    const m2 = t.match(/оценка\s*([1-5])/i) || t.match(/([1-5])\s*из\s*5/) || t.match(/рейтинг\s*([1-5])/i) || t.match(/★\s*([1-5])/);
-    if (m2) return +m2[1];
   } catch (e) {}
   return 0;
 }
@@ -333,7 +366,7 @@ async function scrapeReviews() {
 /* Слепок разметки отзывов: когда оценки не распознались, лог покажет
    реальные классы — по ним чиним селекторы без гаданий. */
 function probeReviewDOM() {
-  const out = { cls: {}, stars: [], card: '' };
+  const out = { cls: {}, stars: [], rateCls: [], card: '' };
   try {
     const els = [...document.querySelectorAll('[class]')].filter((el) => /comment|feedback|review|opinion|otzyv|star|rate|grade|valuation|score/i.test(String(el.getAttribute('class') || '')));
     els.slice(0, 400).forEach((el) => {
@@ -341,16 +374,31 @@ function probeReviewDOM() {
         if (/comment|feedback|review|opinion|otzyv|star|rate|grade|valuation|score/i.test(c)) out.cls[c] = (out.cls[c] || 0) + 1;
       });
     });
-    [...document.querySelectorAll('[class*="star"]')].slice(0, 8).forEach((s) => {
-      let fill = '';
-      try {
-        const shape = s.querySelector('path,polygon,circle,use') || s;
-        fill = String(shape.getAttribute('fill') || (window.getComputedStyle ? window.getComputedStyle(shape).fill : '') || '');
-      } catch (e) {}
-      out.stars.push(String(s.getAttribute('class') || '').slice(0, 80) + ' | fill=' + fill.slice(0, 40) + ' | txt=' + String(s.textContent || '').slice(0, 20));
+    /* Классы с цифрой оценки — именно по ним чинится детект. */
+    const RATE_RX = /\bstar(?:s)?[-_ ]?[1-5]\b|\b(?:rating|rate|grade|score|count)[-_ ]?[1-5]\b/i;
+    document.querySelectorAll('[class]').forEach((el) => {
+      const c = String(el.getAttribute('class') || '');
+      const m = c.match(RATE_RX);
+      if (m && out.rateCls.length < 20) out.rateCls.push(m[0] + ' @ ' + c.slice(0, 70));
     });
-    const card = els.find((el) => (el.innerText || '').length > 60) || els[0];
-    if (card) out.card = String(card.outerHTML || '').replace(/\s+/g, ' ').slice(0, 700);
+    /* Звёзды берём только внутри блоков отзывов — баннеры мешают. */
+    const fbRoots = [...document.querySelectorAll('[class*="feedbackItem"],[class*="feedback__"],[class*="comment"]')].slice(0, 6);
+    const starSrc = fbRoots.length ? fbRoots : [...document.querySelectorAll('[class*="star"]')].slice(0, 6);
+    starSrc.forEach((root) => {
+      [...root.querySelectorAll('[class*="star"]')].slice(0, 4).forEach((s) => {
+        if (out.stars.length >= 8) return;
+        let fill = '';
+        try {
+          const shape = s.querySelector('path,polygon,circle,use') || s;
+          fill = String(shape.getAttribute('fill') || (window.getComputedStyle ? window.getComputedStyle(shape).fill : '') || '');
+        } catch (e) {}
+        out.stars.push(String(s.getAttribute('class') || '').slice(0, 80) + ' | fill=' + fill.slice(0, 40) + ' | txt=' + String(s.textContent || '').slice(0, 12));
+      });
+    });
+    /* Карточка отзыва — ищем по блоку, а не первый попавшийся элемент. */
+    const card = document.querySelector('[class*="feedbackItemBlock"],[class*="feedback__item"],[class*="comment__item"],[class*="feedbackItemWrap"]')
+      || els.find((el) => (el.innerText || '').length > 60) || els[0];
+    if (card) out.card = (String(card.getAttribute('class') || '') + ' >> ' + String(card.outerHTML || '').replace(/\s+/g, ' ')).slice(0, 700);
   } catch (e) { out.err = String((e && e.message) || e); }
   return out;
 }

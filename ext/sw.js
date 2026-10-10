@@ -335,6 +335,7 @@ async function openProduct(nmId) {
           const cls = Object.entries(p.cls || {}).sort((a, b) => b[1] - a[1]).slice(0, 14)
             .map(([k, v]) => k + ':' + v).join(' ');
           await log('probe(' + why + ') classes[' + Object.keys(p.cls || {}).length + '] ' + cls.slice(0, 300));
+          if ((p.rateCls || []).length) await log('probe(' + why + ') rateCls ' + p.rateCls.slice(0, 8).join(' || ').slice(0, 400));
           if ((p.stars || []).length) await log('probe(' + why + ') stars ' + p.stars.slice(0, 6).join(' || ').slice(0, 400));
           if (p.card) await log('probe(' + why + ') card ' + p.card.slice(0, 500));
           if (p.err) await log('probe(' + why + ') ERR ' + p.err);
