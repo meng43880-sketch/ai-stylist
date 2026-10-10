@@ -4,8 +4,16 @@
    пересылает в service worker (у него доступ к вкладке WB) и возвращает
    ответ обратно странице {src:'sainvio-ext', reqId, items|busy}. */
 /* Маяк для страницы: «мост на месте». Страница показывает подсказку,
-   только если маяка нет (а не ждёт 35с в пустоту). */
-try { window.postMessage({ src: 'sainvio-ext', hello: true }, '*'); } catch (e) {}
+   только если маяка нет (а не ждёт 35с в пустоту).
+   Заодно отдаём backend из настроек: страница сверяет его со своим
+   адресом — пуш в один сервер, а читает другой, это ровно «Пока тихо». */
+try {
+  chrome.storage.local.get(['backend'], (cfg) => {
+    try { window.postMessage({ src: 'sainvio-ext', hello: true, backend: String((cfg && cfg.backend) || '') }, '*'); } catch (e) {}
+  });
+} catch (e) {
+  try { window.postMessage({ src: 'sainvio-ext', hello: true }, '*'); } catch (e2) {}
+}
 /* Обратный канал: расширение толкает страницу (отзывы готовы). */
 try {
   chrome.runtime.onMessage.addListener((msg) => {

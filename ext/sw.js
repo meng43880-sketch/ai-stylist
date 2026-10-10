@@ -400,6 +400,10 @@ async function selfTest() {
     await line(` сервер: aiMode=${d.aiMode} data=${d.dataSource} funnel=${d.wbFunnel} takprodam=${d.takprodam && d.takprodam.enabled ? 'on' : 'off'}`);
     await line(` мост: count=${d.collector && d.collector.count} alive=${d.collector && d.collector.alive} fresh=${d.collector && d.collector.fresh}`);
     await line(` AI: stylist=${d.ai && d.ai.stylist} product=${d.ai && d.ai.product} calls=${d.ai && d.ai.usage && d.ai.usage.stylist && d.ai.usage.stylist.calls}`);
+    if (d.reviews) {
+      const ks = (d.reviews.keys || []).map((k) => k.id + ':' + k.n + '(' + k.ageMin + 'м)').join(' ');
+      await line(` отзывы на сервере: ${d.reviews.count}` + (ks ? ' · ' + ks.slice(-300) : ''));
+    }
   } catch (e) { await line('FAIL: сервер недоступен: ' + e.message); return; }
   let tabId = null, mine = false;
   try {

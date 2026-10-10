@@ -95,7 +95,7 @@ const Api = {
       return j;
     } finally { clearTimeout(t); }
   },
-  get: (p) => Api.req(p, { method: 'GET' }),
+  get: (p, ms) => Api.req(p, { method: 'GET' }, ms),
   post: (p, b, ms) => Api.req(p, { method: 'POST', body: JSON.stringify(b || {}) }, ms)
 };
 const RC = {}; // товары из ответов AI (сессия)
@@ -655,7 +655,21 @@ function genderQ(q) {
 window.__extBridge = false; window.__extHintShown = false;
 window.addEventListener('message', (e) => {
   if (!e || e.source !== window || !e.data || e.data.src !== 'sainvio-ext') return;
-  if (e.data.hello) { window.__extBridge = true; return; }
+  if (e.data.hello) {
+    window.__extBridge = true;
+    /* Расширение пушит на свой backend из попапа — если он не совпадает
+       с адресом этой страницы, отзывы уйдут «не туда» и строка будет тихой. */
+    try {
+      const b = String(e.data.backend || '').replace(/\/$/, '');
+      if (b) {
+        window.__extBackend = b;
+        const same = b === location.origin || b.replace(/^http:/, 'https:') === location.origin;
+        window.__extBackendMismatch = same ? '' : b;
+        if (!same && S.route === 'product') revRowStatus(`⚠ расширение шлёт в <b>${esc(b)}</b>, а страница на <b>${esc(location.origin)}</b> — поменяй backend в попапе расширения`);
+      }
+    } catch (e2) {}
+    return;
+  }
   /* Расширение: отзывы готовы — допрашиваем комментарий сразу, не ждём таймеров. */
   if (e.data.reviewsReady && e.data.productId && S.route === 'product' && S.params && S.params.id === e.data.productId) {
     pollReviewComment(e.data.productId);
@@ -1030,9 +1044,11 @@ function revRowStatus(html) {
   if (el && S.route === 'product') el.innerHTML = `<div><b>Отзывы</b><span>${html}</span></div>`;
 }
 async function pollReviewComment(id) {
+  let last = '', sig = null;
   for (let i = 0; i < 12; i++) {
     try {
-      const r = await Api.get('/api/products/' + encodeURIComponent(id) + '/review-comment');
+      /* 60с: AI-комментарий на холодном сервере Render вполне дольше 15с. */
+      const r = await Api.get('/api/products/' + encodeURIComponent(id) + '/review-comment', 60000);
       if (r.data && r.data.comment) {
         const el = document.getElementById('revrow');
         if (el && S.route === 'product') {
@@ -1049,22 +1065,41 @@ async function pollReviewComment(id) {
         }
         return;
       }
+      last = '';
+      sig = r.data && (r.data.count || r.data.rated) ? r.data : sig;
       if (r.data && (r.data.count || r.data.rated)) revRowStatus('Отзывы получены, пишем вывод…');
       else revRowStatus('Ждём расширение — открой карточку товара во вкладке WB…');
     } catch (e) {
-      if (e && (e.code === 'NO_REVIEWS' || e.status === 404)) revRowStatus('Отзывов пока нет — ждём расширение…');
+      if (e && (e.code === 'NO_REVIEWS' || e.status === 404)) {
+        last = 'сервер: отзывов нет';
+        revRowStatus('Отзывов пока нет — ждём расширение…');
+      } else if (e && e.name === 'AbortError') {
+        last = 'таймаут 60с';
+        revRowStatus('Сервер думает дольше обычного (AI)…');
+      } else {
+        last = String((e && (e.code || e.message)) || 'ошибка связи');
+        revRowStatus('Ошибка: ' + esc(last) + ' — повторяем…');
+      }
     }
     await new Promise((res) => setTimeout(res, 10000));
     if (!document.getElementById('revrow')) return;
   }
-  revRowStatus('Пока тихо — загляни на страницу магазина.');
+  /* Честный итог вместо «Пока тихо»: говорим, что именно не пришло. */
+  const warn = window.__extBackendMismatch
+    ? ` ⚠ расширение шлёт в <b>${esc(window.__extBackendMismatch)}</b>, а страница на <b>${esc(location.origin)}</b> — backend в попапе расширения.`
+    : '';
+  if (sig && sig.count) {
+    revRowStatus(`Отзывы есть (${sig.count}${sig.avg != null ? ' · ★' + sig.avg : ''}), но AI-вывод не пришёл${last ? ' · ' + esc(last) : ''}.${warn}`);
+  } else {
+    revRowStatus(`Тишина${last ? ' · ' + esc(last) : ''} — открой карточку через расширение и посмотри лог в попапе.${warn}`);
+  }
 }
 /* Вернулся на вкладку — а комментарий мог уже приехать: допрашиваем заново. */
 try {
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState !== 'visible' || S.route !== 'product') return;
     const el = document.getElementById('revrow');
-    if (el && /Читаем|тихо|ждём|пишем/i.test(el.textContent || '') && S.params && S.params.id) pollReviewComment(S.params.id);
+    if (el && /Читаем|тихо|ждём|пишем|Тишина|Ошибка|думает|Отзывы есть/i.test(el.textContent || '') && S.params && S.params.id) pollReviewComment(S.params.id);
   });
 } catch (e) {}
 /* Расширению: открыть карточку WB и прочитать отзывы (мост живёт пока читаешь ленту). */

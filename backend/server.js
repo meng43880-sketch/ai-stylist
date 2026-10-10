@@ -373,6 +373,10 @@ async function route(req, res) {
     }
     /* Отзывы с карточки (расширение, секрет): сырьё для AI-комментария. */
     if (m === 'POST' && p === '/api/collector/reviews') {
+      /* Расширение читает ответ — CORS, как у ветки /api/collector/push. */
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-collector-key');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
       const key = String(req.headers['x-collector-key'] || '');
       if (!process.env.COLLECTOR_KEY || !secretsEqual(key, process.env.COLLECTOR_KEY))
         return send(res, 403, { ok: false, code: 'AUTH', error: 'Нет доступа' });
@@ -459,10 +463,18 @@ async function route(req, res) {
     if (m === 'GET' && p === '/api/diag') {
       const HF = require('./lib/homefeed');
       const hs = HF.stats();
+      /* Сырые отзывы в кеше: единственный способ снаружи увидеть,
+         дошли ли отзывы от расширения (строка «Отзывы» на карточке). */
+      const rc = (db.cache && db.cache.reviews) || {};
+      const rk = Object.keys(rc);
       return send(res, 200, { ok: true, data: {
         aiMode: CFG.aiMode, dataSource: CFG.dataSource, wbFunnel: process.env.WB_FUNNEL || 'on',
         takprodam: { enabled: (process.env.TAKPRODAM_ENABLED || '').toLowerCase() === 'true', key: !!process.env.TAKPRODAM_API_KEY },
         collector: { enabled: hs.enabled, count: hs.count, alive: hs.alive, fresh: hs.fresh, ageMin: hs.ageMin },
+        reviews: {
+          count: rk.length,
+          keys: rk.slice(-15).map((k) => ({ id: k, n: (rc[k] && rc[k].data && rc[k].data.count) || 0, ageMin: rc[k] ? Math.round((Date.now() - rc[k].ts) / 60000) : -1 }))
+        },
         ai: {
           stylist: Q.isConfigured(CFG.qwen.stylist), product: Q.isConfigured(CFG.qwen.product), vision: Q.isConfigured(CFG.qwen.vision),
           usage: db.usage || {}
