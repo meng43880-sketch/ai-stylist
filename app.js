@@ -1010,8 +1010,10 @@ function renderLiveProduct(p) {
     <div class="cta"><button class="btn" onclick="market('${p.id}')">Купить на Wildberries ${ic('upRight', 16)}</button></div>`;
   /* nmId может отсутствовать у старых кешей: выводим из id вида wb123. */
   const nm = p.nmId || (/^wb\d+$/.test(String(p.id || '')) ? String(p.id).replace(/^wb/, '') : '');
-  /* Не дёргаем вкладку повторно: повторный рендер (лайк и т.п.) убивал бы идущий скрап. */
-  if (nm && window.__extOpenNm !== p.id) { window.__extOpenNm = p.id; extOpenProduct(nm); }
+  /* Не дёргаем вкладку повторно: повторный рендер (лайк и т.п.) убивал бы идущий скрап.
+     pid = наш id карточки ('wb…'): расширение пушит под ним, чтобы ключ на сервере
+     совпадал с тем, что страница опрашивает. */
+  if (nm && window.__extOpenNm !== p.id) { window.__extOpenNm = p.id; extOpenProduct(nm, p.id); }
   __loadFactors(p.id, true);
 }
 /* Ленивые факторы карточки + ряд Отзывы. Вызывается только открытием карточки. */
@@ -1058,6 +1060,7 @@ async function pollReviewComment(id) {
           const nm = String(id || '').replace(/^wb/, '').replace(/\D/g, '');
           el.innerHTML = `<div><b>Отзывы · ★ ${d.avg == null ? '—' : d.avg} · ${d.count || ''}</b>`
             + `<span>${esc(d.comment)}</span>`
+            + (d.aiErr ? `<span style="opacity:.7">ИИ не ответил (${esc(d.aiErr)}) — это статистика по отзывам.</span>` : '')
             + (d.size && d.size !== 'нет данных' ? `<span>Размер: ${esc(d.size)}</span>` : '')
             + (pros ? `<span style="color:#0A7D4B">Хвалят: ${pros}</span>` : '')
             + (cons ? `<span style="color:#B3261E">Ругают: ${cons}</span>` : '')
@@ -1103,8 +1106,8 @@ try {
   });
 } catch (e) {}
 /* Расширению: открыть карточку WB и прочитать отзывы (мост живёт пока читаешь ленту). */
-function extOpenProduct(nmId) {
-  try { window.postMessage({ src: 'sainvio-web', want: 'openProduct', nmId: String(nmId || '') }, '*'); } catch (e) {}
+function extOpenProduct(nmId, pid) {
+  try { window.postMessage({ src: 'sainvio-web', want: 'openProduct', nmId: String(nmId || ''), pid: String(pid || '') }, '*'); } catch (e) {}
 }
 function extCloseProduct() {
   try { window.postMessage({ src: 'sainvio-web', want: 'closeProduct' }, '*'); } catch (e) {}

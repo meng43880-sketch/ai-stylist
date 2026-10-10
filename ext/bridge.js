@@ -25,7 +25,7 @@ try {
 window.addEventListener('message', (e) => {
   if (e.source !== window || !e.data || e.data.src !== 'sainvio-web') return;
   if (e.data.want === 'openProduct' || e.data.want === 'closeProduct') {
-    try { chrome.runtime.sendMessage({ type: e.data.want, nmId: String(e.data.nmId || '') }); } catch (err) {}
+    try { chrome.runtime.sendMessage({ type: e.data.want, nmId: String(e.data.nmId || ''), pid: String(e.data.pid || '') }); } catch (err) {}
     return;
   }
   if (e.data.want !== 'liveQuery' || !e.data.query) return;

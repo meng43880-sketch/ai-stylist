@@ -245,10 +245,12 @@ async function route(req, res) {
           if (out && out.comment) setCache('reviewcm', pm[1], Object.assign({}, out, { revHash }));
           return send(res, 200, { ok: true, data: out });
         } catch (e) {
-          /* AI чихнул — отдаём честные цифры вместо 500, фронт допросит позже. */
+          /* Совсем неожиданная ошибка — в лог истории и честные цифры фронту. */
+          console.error('review-comment', pm[1], e && e.message);
+          try { logHistory('ai', `reviewcm ERR ${pm[1]} ${e && e.message}`); } catch (e2) {}
           const rs = (raw.reviews || []).filter((r) => (r.rating || 0) >= 1 && (r.rating || 0) <= 5);
           const avg = rs.length ? Math.round((rs.reduce((a, r) => a + r.rating, 0) / rs.length) * 10) / 10 : null;
-          return send(res, 200, { ok: true, data: { productId: pm[1], source: 'signals', count: (raw.reviews || []).length, rated: rs.length, avg, comment: null } });
+          return send(res, 200, { ok: true, data: { productId: pm[1], source: 'signals', count: (raw.reviews || []).length, rated: rs.length, avg, comment: null, aiErr: String((e && e.message) || 'ошибка').slice(0, 120) } });
         }
       }
       if (pm[2] === '/availability') {
@@ -477,7 +479,8 @@ async function route(req, res) {
         },
         ai: {
           stylist: Q.isConfigured(CFG.qwen.stylist), product: Q.isConfigured(CFG.qwen.product), vision: Q.isConfigured(CFG.qwen.vision),
-          usage: db.usage || {}
+          usage: db.usage || {},
+          lastErr: getCache('aistat', 'lastReviewErr', 7 * 24 * 3600 * 1000) || null
         }
       } });
     }

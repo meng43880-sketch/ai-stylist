@@ -293,9 +293,12 @@ async function healPhotos() {
 /* Карточка в приложении: открываем её на WB и НЕ закрываем, пока юзер
    в ленте. Читаем до 30 отзывов, пушим на сервер для AI-комментария. */
 let __productTab = null;
-async function openProduct(nmId) {
+async function openProduct(nmId, pid) {
   const id = String(nmId || '').replace(/\D/g, '');
   if (!id) return;
+  /* Ключ на сервере = id карточки страницы ('wb…'), иначе фронт опрашивает
+     один ключ, а пуш ложится в другой — и строка «Отзывы» тихая. */
+  const storeId = /^wb\d+$/.test(String(pid || '')) ? String(pid) : ('wb' + id);
   const url = `https://www.wildberries.ru/catalog/${id}/detail.aspx`;
   try {
     if (__productTab) {
@@ -325,7 +328,7 @@ async function openProduct(nmId) {
     } catch (e) { dbg = ' | msg-err'; }
     let extv = '';
     try { extv = ' [ext v' + chrome.runtime.getManifest().version + ']'; } catch (e) {}
-    await log('карточка ' + id + ': отзывов ' + reviews.length + ' (' + via + ')' + dbg + extv);
+    await log('карточка ' + id + ': отзывов ' + reviews.length + ' (' + via + ')' + (storeId !== 'wb' + id ? ' → ключ ' + storeId : '') + dbg + extv);
     /* Слепок разметки: без него «чини селекторы» — гадание вслепую. */
     const probe = async (why) => {
       try {
@@ -363,7 +366,7 @@ async function openProduct(nmId) {
       const r = await fetch(cfg.backend.replace(/\/$/, '') + '/api/collector/reviews', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-collector-key': cfg.key },
-        body: JSON.stringify({ productId: 'wb' + id, nmId: id, reviews })
+        body: JSON.stringify({ productId: storeId, nmId: id, reviews })
       });
       let body = '';
       try { body = (await r.text()).slice(0, 100); } catch (e) {}
@@ -373,7 +376,7 @@ async function openProduct(nmId) {
     try {
       const tabs = await chrome.tabs.query({});
       for (const t of tabs) {
-        try { await chrome.tabs.sendMessage(t.id, { type: 'reviewsReady', productId: 'wb' + id }); } catch (e) {}
+        try { await chrome.tabs.sendMessage(t.id, { type: 'reviewsReady', productId: storeId }); } catch (e) {}
       }
     } catch (e) {}
   } catch (e) { await log('openProduct ERR ' + e.message); }
@@ -456,7 +459,7 @@ chrome.runtime.onMessage.addListener((m, sender, sendResponse) => {
   if (m && m.type === 'selftest') { selfTest(); return; }
   if (m && m.type === 'heal') { healPhotos(); return; }
   if (m && m.type === 'pollRelay') { pollRelay(); return; }
-  if (m && m.type === 'openProduct') { openProduct(m.nmId); return; }
+  if (m && m.type === 'openProduct') { openProduct(m.nmId, m.pid); return; }
   if (m && m.type === 'closeProduct') { closeProduct(); return; }
   if (m && m.type === 'liveQuery') {
     runLiveQuery(m.query || '').then(sendResponse);

@@ -646,23 +646,32 @@ async function reviewComment(productId, reviews) {
   const t0 = Date.now();
   const quotes = list.filter((r) => (r.rating || 0) > 0).slice(0, 8)
     .map((r, i) => `${i + 1}. [${r.rating}] ${String(r.text || '').slice(0, 160)}`).join('\n');
-  const obj = await Q.chatJSON(CFG.qwen.product, {
-    system: 'Ты пишешь итог по русским отзывам Wildberries. Отвечай СТРОГО JSON: {"verdict":"главный итог, до 12 слов","pros":["2-3 плюса, каждый до 4 слов"],"cons":["2-3 минуса, каждый до 4 слов"],"size":"одно из: маломерит, в размер, большемерит, нет данных"}. Только русский язык, ни одного английского слова. Цифры бери только из блока СТАТИСТИКА ниже — ничего не выдумывай.',
-    user: `СТАТИСТИКА: всего отзывов ${list.length}, с оценкой ${st.rated}, средняя ${st.avg == null ? 'неизвестна' : st.avg}. Позитивных (4-5): ${st.pos}, негативных (1-2): ${st.neg}. Частые темы: ${topLine || 'нет'}. ЦИТАТЫ:\n${quotes}`.slice(0, 4000),
-    required: ['verdict', 'pros', 'cons', 'size'], tag: 'product', maxTokens: 150, temperature: 0.1
-  });
+  /* AI — не повод молчать: любая ошибка провайдера уходит в fallback
+     с живым текстом по статистике, а причина пишется в aiErr и в кеш
+     (видна в GET /api/diag → ai.lastErr). */
+  let obj = null, aiErr = '';
+  try {
+    obj = await Q.chatJSON(CFG.qwen.product, {
+      system: 'Ты пишешь итог по русским отзывам Wildberries. Отвечай СТРОГО JSON: {"verdict":"главный итог, до 12 слов","pros":["2-3 плюса, каждый до 4 слов"],"cons":["2-3 минуса, каждый до 4 слов"],"size":"одно из: маломерит, в размер, большемерит, нет данных"}. Только русский язык, ни одного английского слова. Цифры бери только из блока СТАТИСТИКА ниже — ничего не выдумывай.',
+      user: `СТАТИСТИКА: всего отзывов ${list.length}, с оценкой ${st.rated}, средняя ${st.avg == null ? 'неизвестна' : st.avg}. Позитивных (4-5): ${st.pos}, негативных (1-2): ${st.neg}. Частые темы: ${topLine || 'нет'}. ЦИТАТЫ:\n${quotes}`.slice(0, 4000),
+      required: ['verdict', 'pros', 'cons', 'size'], tag: 'product', maxTokens: 150, temperature: 0.1
+    });
+  } catch (e) {
+    aiErr = ((e && e.code) || 'ERR') + ': ' + ((e && e.message) || 'ошибка AI');
+    try { require('./store').setCache('aistat', 'lastReviewErr', { productId, msg: aiErr, ts: Date.now() }); } catch (e2) { /* не мешаем ответу */ }
+  }
   /* Проверка ответа: кириллица, размер из справочника, длина в рамках. */
-  const verdict = pickStr(obj, ['verdict', 'comment', 'summary', 'text', 'response']);
+  const verdict = obj ? pickStr(obj, ['verdict', 'comment', 'summary', 'text', 'response']) : '';
   const sizes = ['маломерит', 'в размер', 'большемерит', 'нет данных'];
-  const size = sizes.includes(String(obj.size || '').trim().toLowerCase()) ? String(obj.size).trim().toLowerCase() : 'нет данных';
+  const size = obj && sizes.includes(String(obj.size || '').trim().toLowerCase()) ? String(obj.size).trim().toLowerCase() : 'нет данных';
   const clean = (a) => (Array.isArray(a) ? a.map((s) => String(s).trim()).filter((s) => s && /[а-яё]/i.test(s) && s.split(/\s+/).length <= 5).slice(0, 3) : []);
-  const pros = clean(obj.pros), cons = clean(obj.cons);
-  const bad = !verdict || !/[а-яё]/i.test(verdict) || verdict.length > 200 || /[a-z]{4,}/i.test(verdict);
-  const out = bad ? fallback : {
+  const pros = obj ? clean(obj.pros) : [], cons = obj ? clean(obj.cons) : [];
+  const bad = !obj || !verdict || !/[а-яё]/i.test(verdict) || verdict.length > 200 || /[a-z]{4,}/i.test(verdict);
+  const out = bad ? Object.assign({}, fallback, aiErr ? { aiErr } : {}) : {
     productId, source: 'qwen-product', count: list.length, rated: st.rated, avg: st.avg,
     comment: verdict, pros, cons, size, themes: st.themes
   };
-  logHistory('ai', `reviewcm ${Q.getLastModel('product') || CFG.qwen.product.model} ${Date.now() - t0}ms ${productId}${bad ? ' FALLBACK' : ''}`);
+  logHistory('ai', `reviewcm ${Q.getLastModel('product') || CFG.qwen.product.model} ${Date.now() - t0}ms ${productId}${bad ? ' FALLBACK' : ''}${aiErr ? ' ' + aiErr : ''}`);
   return out;
 }
 module.exports = { analyzePhoto, describeItem, productAnalysis, searchPipeline, scoreCtx, structFromIntent, chat, getWeather, demoVision, explainProduct, reviewComment };
