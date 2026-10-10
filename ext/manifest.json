@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "sainvio collector",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Домашний сборщик каталога WB для sainvio: идёт из живого браузера, wbaas пропускает",
   "permissions": ["storage", "alarms"],
   "host_permissions": [

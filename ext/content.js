@@ -155,6 +155,21 @@ function ratingFromStars(el) {
     if (stars.length >= 3 && stars.length <= 10) {
       const filled = stars.filter((s) => /fill|active|\bon\b|full|selected|checked|rated|grade/i.test(String(s.getAttribute('class') || ''))).length;
       if (filled >= 1 && filled <= 5) return filled;
+      /* 2b) классов нет — различаем заливку SVG: серая = пустая */
+      try {
+        const fills = stars.map((s) => {
+          let f = '';
+          try {
+            const shape = s.querySelector('path,polygon,circle,use') || s;
+            f = String(shape.getAttribute('fill') || '');
+            if (!f && window.getComputedStyle) f = String(window.getComputedStyle(shape).fill || '');
+          } catch (e) {}
+          return f;
+        });
+        const gray = fills.filter((f) => !f || /none|transparent|e0e0e0|d8d8d8|c7c7c7|c9c9c9|cccccc|f0f0f0|ededed|e5e5e5/i.test(f)).length;
+        const fl = fills.length - gray;
+        if (fl >= 1 && fl <= 5 && fills.length >= 3) return fl;
+      } catch (e) {}
     }
     /* 3) aria-подписи */
     const lab = scope.querySelector('[aria-label*="ценк"],[aria-label*="звезд"],[aria-label*="оценк"]');
@@ -162,9 +177,9 @@ function ratingFromStars(el) {
       const m = String(lab.getAttribute('aria-label') || '').match(/([1-5])/);
       if (m) return +m[1];
     }
-    /* 4) запасной вариант: явная «оценка N» текстом */
+    /* 4) запасной вариант: явная «оценка N» / «N из 5» / «★N» текстом */
     const t = String((scope.innerText || scope.textContent || '')).slice(0, 300);
-    const m2 = t.match(/оценка\s*([1-5])/i);
+    const m2 = t.match(/оценка\s*([1-5])/i) || t.match(/([1-5])\s*из\s*5/) || t.match(/рейтинг\s*([1-5])/i) || t.match(/★\s*([1-5])/);
     if (m2) return +m2[1];
   } catch (e) {}
   return 0;
@@ -315,8 +330,36 @@ async function scrapeReviews() {
   } catch (e) {}
   return { reviews: [], via: 'none', debug: Object.assign(debug, { bodyHasOtzyv: bodyHas, candCount }) };
 }
+/* Слепок разметки отзывов: когда оценки не распознались, лог покажет
+   реальные классы — по ним чиним селекторы без гаданий. */
+function probeReviewDOM() {
+  const out = { cls: {}, stars: [], card: '' };
+  try {
+    const els = [...document.querySelectorAll('[class]')].filter((el) => /comment|feedback|review|opinion|otzyv|star|rate|grade|valuation|score/i.test(String(el.getAttribute('class') || '')));
+    els.slice(0, 400).forEach((el) => {
+      String(el.getAttribute('class') || '').split(/\s+/).forEach((c) => {
+        if (/comment|feedback|review|opinion|otzyv|star|rate|grade|valuation|score/i.test(c)) out.cls[c] = (out.cls[c] || 0) + 1;
+      });
+    });
+    [...document.querySelectorAll('[class*="star"]')].slice(0, 8).forEach((s) => {
+      let fill = '';
+      try {
+        const shape = s.querySelector('path,polygon,circle,use') || s;
+        fill = String(shape.getAttribute('fill') || (window.getComputedStyle ? window.getComputedStyle(shape).fill : '') || '');
+      } catch (e) {}
+      out.stars.push(String(s.getAttribute('class') || '').slice(0, 80) + ' | fill=' + fill.slice(0, 40) + ' | txt=' + String(s.textContent || '').slice(0, 20));
+    });
+    const card = els.find((el) => (el.innerText || '').length > 60) || els[0];
+    if (card) out.card = String(card.outerHTML || '').replace(/\s+/g, ' ').slice(0, 700);
+  } catch (e) { out.err = String((e && e.message) || e); }
+  return out;
+}
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg && msg.type === 'wbPing') { sendResponse({ ok: true }); return; }
+  if (msg && msg.type === 'probeReviews') {
+    try { sendResponse({ ok: true, probe: probeReviewDOM() }); } catch (e) { sendResponse({ ok: false, error: String((e && e.message) || e) }); }
+    return;
+  }
   if (msg && msg.type === 'scrapeReviews') {
     scrapeReviews()
       .then((r) => sendResponse({ ok: true, reviews: r.reviews || [], via: r.via || '?', debug: r.debug || null, ratingsOk: r.ratingsOk !== false, hasSummary: !!r.hasSummary }))

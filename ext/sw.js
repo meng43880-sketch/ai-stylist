@@ -324,11 +324,27 @@ async function openProduct(nmId) {
       }
     } catch (e) { dbg = ' | msg-err'; }
     await log('карточка ' + id + ': отзывов ' + reviews.length + ' (' + via + ')' + dbg);
-    if (!reviews.length) return;
+    /* Слепок разметки: без него «чини селекторы» — гадание вслепую. */
+    const probe = async (why) => {
+      try {
+        const pr = await chrome.tabs.sendMessage(__productTab, { type: 'probeReviews' });
+        if (pr && pr.ok && pr.probe) {
+          const p = pr.probe;
+          const cls = Object.entries(p.cls || {}).sort((a, b) => b[1] - a[1]).slice(0, 14)
+            .map(([k, v]) => k + ':' + v).join(' ');
+          await log('probe(' + why + ') classes[' + Object.keys(p.cls || {}).length + '] ' + cls.slice(0, 300));
+          if ((p.stars || []).length) await log('probe(' + why + ') stars ' + p.stars.slice(0, 6).join(' || ').slice(0, 400));
+          if (p.card) await log('probe(' + why + ') card ' + p.card.slice(0, 500));
+          if (p.err) await log('probe(' + why + ') ERR ' + p.err);
+        } else if (pr && pr.error) await log('probe(' + why + ') ERR ' + pr.error);
+      } catch (e) { await log('probe(' + why + ') ERR ' + e.message); }
+    };
+    if (!reviews.length) { await probe('empty'); return; }
     /* Проверка перед пушем: мусор молча не отправляем. */
     const rated = reviews.filter((r) => (r.rating || 0) > 0).length;
     if (rated < Math.max(2, Math.ceil(reviews.length * 0.4)) || !ratingsOk) {
       await log('оценки не распознаны (' + rated + '/' + reviews.length + ') — не пушу, чини селекторы');
+      await probe('ratings');
       return;
     }
     if (hasSummary) await log('внимание: на странице есть AI-сводка WB — вычищена из выборки');
