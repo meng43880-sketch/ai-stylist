@@ -16,6 +16,7 @@ const A = require('./lib/auth');
 const T = require('./lib/taste');
 const CX = require('./lib/context');
 const EV = require('./lib/events');
+const STY = require('./lib/stylist'); // AI-стилист v2: подменяет O.chat и O.reviewComment
 
 const ROOT = path.join(__dirname, '..');
 const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.json': 'application/json; charset=utf-8' };
@@ -98,7 +99,7 @@ async function route(req, res) {
   console.log(new Date().toISOString(), m, p);
 
   /* --- static frontend --- */
-  if (m === 'GET' && (p === '/' || p === '/index.html' || p === '/styles.css' || p === '/app.js' || p === '/demo.js')) {
+  if (m === 'GET' && (p === '/' || p === '/index.html' || p === '/styles.css' || p === '/app.js' || p === '/demo.js' || p === '/chat.js' || p === '/ui.css')) {
     const f = p === '/' ? '/index.html' : p;
     const fp = path.join(ROOT, f);
     if (!fp.startsWith(ROOT)) return send(res, 403, { ok: false });
@@ -205,9 +206,10 @@ async function route(req, res) {
       const b = await readBody(req);
       EV.ensureUser(U);
       const pipe = await O.searchPipeline({ struct: {}, profile: profile(U), feedback: feedback(U), limit: 24, wardrobe: U.wardrobe, taste: U.taste, favorites: U.favorites });
-      const outs = R.buildOutfits(pipe.items, profile(U), b.count || 3).map((o) => Object.assign({}, o, {
+      STY.addOwn(pipe.items, U);
+      const outs = STY.outfitsFor(pipe.items, profile(U), U, b.count || 3).map((o) => Object.assign({}, o, {
         items: o.items.map((id) => pipe.items.find((x) => x.id === id)).filter(Boolean),
-        why: ['соответствует твоему стилю', 'подходит по цветам', 'подходит по параметрам', 'соответствует сезону', 'укладывается в бюджет']
+        why: o.why || []
       }));
       EV.logRec(U, 'outfits', outs.flatMap((o) => o.items.map((x) => x.id || x)));
       save();
@@ -390,6 +392,7 @@ async function route(req, res) {
       })).filter((r) => r.text.length >= 10);
       if (!pid || !list.length) return send(res, 400, { ok: false, error: 'Нужны productId и отзывы' });
       setCache('reviews', pid, { reviews: list, ts: Date.now(), count: list.length });
+      setCache('reviewcm', pid, null);
       return send(res, 200, { ok: true, data: { saved: list.length } });
     }
     /* --- live relay: телефон без расширения ←→ домашнее расширение.
