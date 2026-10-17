@@ -1,0 +1,273 @@
+{
+ "version": 1,
+ "prompts": [
+  {
+   "id": 1,
+   "q": "куртка на осень до 7000",
+   "expect": {
+    "category": "top",
+    "subcategory": "jacket",
+    "maxPrice": 7000,
+    "occasion": "autumn"
+   },
+   "note": "поиск"
+  },
+  {
+   "id": 2,
+   "q": "чёрные брюки до 3000",
+   "expect": {
+    "category": "bottom",
+    "subcategory": "pants",
+    "maxPrice": 3000,
+    "color": "black"
+   },
+   "note": "поиск"
+  },
+  {
+   "id": 3,
+   "q": "белые кроссовки",
+   "expect": {
+    "category": "shoes",
+    "subcategory": "sneakers",
+    "color": "white"
+   },
+   "note": "поиск"
+  },
+  {
+   "id": 4,
+   "q": "худи оверсайз оливковое",
+   "expect": {
+    "category": "top",
+    "subcategory": "hoodie",
+    "color": "olive"
+   },
+   "note": "поиск"
+  },
+  {
+   "id": 5,
+   "q": "джинсы прямые до 4 тыс",
+   "expect": {
+    "category": "bottom",
+    "subcategory": "jeans",
+    "maxPrice": 4000
+   },
+   "note": "бюджет словами"
+  },
+  {
+   "id": 6,
+   "q": "что-то минималистичное",
+   "expect": {
+    "style": "minimal"
+   },
+   "note": "размытый запрос"
+  },
+  {
+   "id": 7,
+   "q": "образ на свидание",
+   "expect": {
+    "occasion": "date"
+   },
+   "note": "повод"
+  },
+  {
+   "id": 8,
+   "q": "собери образ на выходные",
+   "expect": {
+    "occasion": "weekend"
+   },
+   "note": "образ"
+  },
+  {
+   "id": 9,
+   "q": "образ в офис",
+   "expect": {
+    "occasion": "office"
+   },
+   "note": "образ"
+  },
+  {
+   "id": 10,
+   "q": "рубашка для работы",
+   "expect": {
+    "category": "top",
+    "subcategory": "shirt",
+    "occasion": "office"
+   },
+   "note": "поиск"
+  },
+  {
+   "id": 11,
+   "q": "в стиле old money",
+   "expect": {
+    "style": "oldmoney"
+   },
+   "note": "стиль"
+  },
+  {
+   "id": 12,
+   "q": "streetwear куртка",
+   "expect": {
+    "category": "top",
+    "subcategory": "jacket",
+    "style": "street"
+   },
+   "note": "стиль"
+  },
+  {
+   "id": 13,
+   "q": "кеды до 5000 рублей",
+   "expect": {
+    "category": "shoes",
+    "subcategory": "sneakers",
+    "maxPrice": 5000
+   },
+   "note": "бюджет"
+  },
+  {
+   "id": 14,
+   "q": "рюкзак для прогулки",
+   "expect": {
+    "category": "acc",
+    "subcategory": "bag",
+    "occasion": "walk"
+   },
+   "note": "аксессуар"
+  },
+  {
+   "id": 15,
+   "q": "шапка серая",
+   "expect": {
+    "category": "acc",
+    "subcategory": "hat",
+    "color": "gray"
+   },
+   "note": "аксессуар"
+  },
+  {
+   "id": 16,
+   "q": "пальто бежевое",
+   "expect": {
+    "category": "top",
+    "subcategory": "jacket",
+    "color": "beige"
+   },
+   "note": "поиск"
+  },
+  {
+   "id": 17,
+   "q": "ботинки челси коричневые",
+   "expect": {
+    "category": "shoes",
+    "subcategory": "boots",
+    "color": "brown"
+   },
+   "note": "поиск"
+  },
+  {
+   "id": 18,
+   "q": "футболка размер M",
+   "expect": {
+    "category": "top",
+    "subcategory": "tshirt",
+    "size": "M"
+   },
+   "note": "размер"
+  },
+  {
+   "id": 19,
+   "q": "что надеть сегодня",
+   "expect": {},
+   "note": "погода без категории"
+  },
+  {
+   "id": 20,
+   "q": "что надеть при +3",
+   "expect": {},
+   "note": "погода"
+  },
+  {
+   "id": 21,
+   "q": "я мёрзну, что посоветуешь",
+   "expect": {},
+   "note": "разговорный"
+  },
+  {
+   "id": 22,
+   "q": "привет",
+   "expect": {},
+   "note": "болтовня"
+  },
+  {
+   "id": 23,
+   "q": "спасибо, класс",
+   "expect": {},
+   "note": "болтовня"
+  },
+  {
+   "id": 24,
+   "q": "карго чёрные",
+   "expect": {
+    "category": "bottom",
+    "color": "black"
+   },
+   "note": "поиск"
+  },
+  {
+   "id": 25,
+   "q": "свитер зелёный до 3500",
+   "expect": {
+    "category": "top",
+    "subcategory": "sweater",
+    "color": "green",
+    "maxPrice": 3500
+   },
+   "note": "поиск"
+  },
+  {
+   "id": 26,
+   "q": "подбери что-нибудь в подарок брату",
+   "expect": {},
+   "note": "неоднозначный запрос"
+  },
+  {
+   "id": 27,
+   "q": "сумка для офиса",
+   "expect": {
+    "category": "acc",
+    "subcategory": "bag",
+    "occasion": "office"
+   },
+   "note": "аксессуар"
+  },
+  {
+   "id": 28,
+   "q": "куртка до 8000",
+   "expect": {
+    "category": "top",
+    "subcategory": "jacket",
+    "maxPrice": 8000
+   },
+   "note": "контекст для уточнения",
+   "group": "A"
+  },
+  {
+   "id": 29,
+   "q": "Собери образ из моего гардероба",
+   "expect": {},
+   "note": "режим гардероба"
+  },
+  {
+   "id": 30,
+   "q": "а подешевле?",
+   "expect": {},
+   "note": "уточнение",
+   "group": "A"
+  },
+  {
+   "id": 31,
+   "q": "какой цвет мне идёт",
+   "expect": {},
+   "note": "совет"
+  }
+ ]
+}

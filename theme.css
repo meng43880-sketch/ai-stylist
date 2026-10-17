@@ -1,0 +1,75 @@
+/* theme.css — тёмная тема. Подключается ПОСЛЕ styles.css, ui.css, features.css.
+   Включается атрибутом <html data-theme="dark"> (ставит маленький скрипт в <head> до отрисовки, без вспышки).
+   Приветственный экран (.hero-full) уже тёмный и здесь не меняется. */
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#0E0E10; --card:#17171A; --ink:#F2F2F4; --muted:#9A9AA2; --line:#2A2A2F;
+  --green:#F2F2F4; --green-ink:#F2F2F4; --mint:#1E1E22; --mint-ink:#F2F2F4;
+  --shadow-sm:0 2px 8px rgba(0,0,0,.5); --shadow-md:0 10px 30px rgba(0,0,0,.55);
+  --ok:#5FD39A; --bad:#FF8A80;
+  --dk-fill:#26262B;      /* спокойная плашка вместо светло-серого */
+  --dk-on:#0A0A0A;        /* текст на светлых кнопках «ink» */
+}
+:root[data-theme="dark"] body{background:#050506}
+:root[data-theme="dark"] .stage{box-shadow:0 30px 80px rgba(0,0,0,.7)}
+/* кнопки и «включённые» элементы: фон стал светлым — текст тёмный */
+:root[data-theme="dark"] .btn,
+:root[data-theme="dark"] .chip.on,:root[data-theme="dark"] .size.on,:root[data-theme="dark"] .avatar,
+:root[data-theme="dark"] .toastmsg,:root[data-theme="dark"] .newpill,:root[data-theme="dark"] .cme,
+:root[data-theme="dark"] .cprev button,:root[data-theme="dark"] .chatprev button,:root[data-theme="dark"] .pava .cam,
+:root[data-theme="dark"] .quick button:active,:root[data-theme="dark"] .onb .opt button.on,:root[data-theme="dark"] .onb .sz button.on,
+:root[data-theme="dark"] .fxbtns button.on,:root[data-theme="dark"] .hint .ha button,:root[data-theme="dark"] .verdict2,
+:root[data-theme="dark"] .fbrow button.on,:root[data-theme="dark"] .agree .box.on{color:var(--dk-on)}
+:root[data-theme="dark"] .btn.secondary,:root[data-theme="dark"] .qchips button,:root[data-theme="dark"] .aibar textarea,
+:root[data-theme="dark"] .photoframe,:root[data-theme="dark"] .wphoto{background:var(--dk-fill);color:var(--ink)}
+:root[data-theme="dark"] .btn.secondary{color:var(--ink)}
+:root[data-theme="dark"] .wphoto{border-color:#3A3A40;color:#8a8a92}
+:root[data-theme="dark"] .photoframe .ph,:root[data-theme="dark"] .nophoto{color:#6A6A72}
+:root[data-theme="dark"] .hero-full .btn.light{background:#fff;color:#0A0A0A}
+/* светлые карточки → тёмные */
+:root[data-theme="dark"] .pick,:root[data-theme="dark"] .minioutfit,:root[data-theme="dark"] .sugg .si,
+:root[data-theme="dark"] .fxrow,:root[data-theme="dark"] .fxo,:root[data-theme="dark"] .fxday,:root[data-theme="dark"] .fxtool,
+:root[data-theme="dark"] .fxbtns button,:root[data-theme="dark"] .swapc,:root[data-theme="dark"] .cmpgrid .c,:root[data-theme="dark"] .usage,
+:root[data-theme="dark"] .palchip,:root[data-theme="dark"] .onb .big,:root[data-theme="dark"] .onb .opt button,:root[data-theme="dark"] .onb .sz button,
+:root[data-theme="dark"] .fxstats>div,:root[data-theme="dark"] .fbrow button,:root[data-theme="dark"] .hint .hi,:root[data-theme="dark"] .swapbtn{background:var(--card);color:var(--ink)}
+:root[data-theme="dark"] .m.ai{background:#232327}
+:root[data-theme="dark"] .macts button:active,:root[data-theme="dark"] .cactions button:active{background:#2A2A2F}
+:root[data-theme="dark"] .macts .time{color:#6A6A72}
+/* заглушки фото и подложки */
+:root[data-theme="dark"] .card .ph,:root[data-theme="dark"] .pph,:root[data-theme="dark"] .gal img.gmain,:root[data-theme="dark"] .wcard .wph,
+:root[data-theme="dark"] .tint,:root[data-theme="dark"] .fxo .mini,:root[data-theme="dark"] .fxrow .th,:root[data-theme="dark"] .swapc img,
+:root[data-theme="dark"] .cmpgrid .c .im{background:var(--dk-fill)}
+:root[data-theme="dark"] .skel{background:linear-gradient(90deg,#1E1E22 25%,#2A2A30 37%,#1E1E22 63%);background-size:400% 100%}
+/* прозрачные «стеклянные» панели */
+:root[data-theme="dark"] .chathead{background:rgba(14,14,16,.92)}
+:root[data-theme="dark"] .tabs{background:rgba(14,14,16,.9)}
+:root[data-theme="dark"] .stickybar{background:rgba(14,14,16,.94)}
+:root[data-theme="dark"] .pbadge,:root[data-theme="dark"] .pfav,:root[data-theme="dark"] .card .fav,:root[data-theme="dark"] .wcard .wdel{background:rgba(23,23,26,.92);color:var(--ink)}
+:root[data-theme="dark"] .pfav.on,:root[data-theme="dark"] .card .fav.on{color:#FF5C7C}
+:root[data-theme="dark"] .card .ph .livedot2{box-shadow:0 0 0 3px rgba(14,14,16,.9)}
+:root[data-theme="dark"] .pava img{border-color:#0E0E10}
+/* прогресс и шкалы */
+:root[data-theme="dark"] .ring{background:conic-gradient(var(--ink) calc(var(--p) * 1%),#3A3A40 0)}
+:root[data-theme="dark"] .ring b,:root[data-theme="dark"] .ring::after{color:var(--ink)}
+:root[data-theme="dark"] .bar,:root[data-theme="dark"] .sizebar,:root[data-theme="dark"] .usage .bar,:root[data-theme="dark"] .onbdots i{background:#2A2A2F}
+:root[data-theme="dark"] .onbdots i.on,:root[data-theme="dark"] .usage .bar i{background:var(--ink)}
+:root[data-theme="dark"] .dotspin{border-color:#3A3A40;border-top-color:var(--cobalt)}
+:root[data-theme="dark"] .sheet .grab{background:#3A3A40}
+:root[data-theme="dark"] .cbtn.send:disabled{background:#2A2A2F;color:#6A6A72}
+/* предупреждения, ошибки, теги */
+:root[data-theme="dark"] .offbar,:root[data-theme="dark"] .offline,:root[data-theme="dark"] .fxnote.warn,:root[data-theme="dark"] .tagw{background:#3A2D10;color:#F2D18A;border-color:#5A4720}
+:root[data-theme="dark"] .prs.warn{color:#E8B34A}
+:root[data-theme="dark"] .cerr,:root[data-theme="dark"] .tint.red,:root[data-theme="dark"] .pricerow .disc2,:root[data-theme="dark"] .tag.c{background:#3A1814;color:#FFB4AB}
+:root[data-theme="dark"] .cerr button{background:#FFB4AB;color:#3A1814}
+:root[data-theme="dark"] .tag.p{background:#12301F;color:#6FD3A0}
+:root[data-theme="dark"] .tagg{background:#12301F;color:#6FD3A0}
+:root[data-theme="dark"] .pgroup.danger .prow{color:#FF6B6B}
+:root[data-theme="dark"] .cmprow .v.w{background:#12301F;color:#6FD3A0}
+:root[data-theme="dark"] .swapc .dl.up,:root[data-theme="dark"] .fxrow .rt.dn{color:#6FD3A0}
+:root[data-theme="dark"] .pick b,:root[data-theme="dark"] .card .mt,:root[data-theme="dark"] .ocard .meta strong,:root[data-theme="dark"] .minioutfit .t b,:root[data-theme="dark"] .livelabel{color:#7C9BFF}
+:root[data-theme="dark"] .livedot{background:#7C9BFF}
+/* выбор темы в профиле */
+.themeopts{display:flex;gap:8px;margin-top:2px}
+.themeopts .chip{flex:1;justify-content:center;text-align:center;padding:11px 8px}
+@media (prefers-reduced-motion:no-preference){body,.stage,.card,.tabs{transition:background-color .25s,color .25s}}
+:root[data-theme="dark"] .hint .ha button.g{background:transparent;color:var(--muted)}

@@ -140,6 +140,7 @@
       if (m.outfit && m.outfit.items) inner += `<div style="margin-top:12px">${outfitCard(m.outfit)}</div>`;
       if (picks.length || live.length) inner += `<div class="more"><button class="link" style="padding:6px 0" onclick="openAll('${m.id}')">Показать все ${m.total || (m.allPicks || []).length || ''} ${ic('chevR', 13)}</button><button class="link" style="padding:6px 0" onclick="chatToFeed('${m.id}')">В ленту</button></div>`;
       if (isLast && !BUSY && (m.quick || []).length) inner += `<div class="quick">${m.quick.map((q) => `<button onclick="ask(${esc(JSON.stringify(q)).replace(/&quot;/g, '&quot;')})">${esc(q)}</button>`).join('')}</div>`;
+      if (!BUSY && window.__fbRow) inner += window.__fbRow(m);
       if (isLast && !BUSY) inner += `<div class="cactions"><button onclick="copyMsg('${m.id}')" aria-label="Копировать">${ic('copy', 17)}</button><button onclick="ask('Покажи другие варианты, не те же самые')" aria-label="Ещё вариант">${ic('refresh', 17)}</button></div>`;
     }
     return `<div class="cm"><span class="cav ${start ? '' : 'gap'}">${start ? spark(13) : ''}</span><div class="cbody">${inner}</div></div>`;
@@ -153,6 +154,7 @@
   function intro() {
     const t = S.ctx.weather && typeof S.ctx.weather.temp === 'number' ? S.ctx.weather.temp : null;
     const sg = [['Образ на выходные', 'Собери образ на выходные', 'shirt'], ['Подбери куртку', 'Подбери куртку на осень', 'hanger'],
+      ['Из моего гардероба', 'Собери образ из моего гардероба', 'hanger'],
       [t != null ? 'Что надеть при ' + (t > 0 ? '+' : '') + t + '°' : 'Что надеть сегодня', 'Что надеть сегодня' + (t != null ? ' при ' + t + ' градусах' : ''), 'sun']];
     return `<div class="chatintro"><span class="cav">${spark(22)}</span><h2>Привет${S.profile.name ? ', ' + esc(S.profile.name) : ''}!</h2>
       <p>Я стилист. Подберу вещи, соберу образ или найду похожее по фото.</p></div>
@@ -329,12 +331,14 @@
       const modelPicks = (d.picks || []).filter((p) => RC[p.id]);
       const reasons = {}; modelPicks.forEach((p) => { if (p.reason) reasons[p.id] = p.reason; });
       const ids = modelPicks.map((p) => p.id).concat(prods.map((p) => p.id).filter((id) => !modelPicks.some((p) => p.id === id)));
-      const patch = { text: d.message || 'Готово.', picks: ids.slice(0, 6), allPicks: prods.slice(0, 50).map((p) => p.id), pickReasons: reasons, total: d.total || 0, quick: d.quick || [], liveBusy: true };
-      if (d.intent === 'build_outfit' || /образ/i.test(text)) {
+      const noLive = d.intent === 'wardrobe_outfit' || d.limited; // из гардероба и «лимит» — без поиска свежего на WB
+      const patch = { text: d.message || 'Готово.', picks: ids.slice(0, 6), allPicks: prods.slice(0, 50).map((p) => p.id), pickReasons: reasons, total: d.total || 0, quick: d.quick || [], liveBusy: !noLive };
+      if (d.outfit && d.outfit.items) { RC[d.outfit.id] = d.outfit; patch.outfit = d.outfit; }
+      if (!d.outfit && !noLive && (d.intent === 'build_outfit' || /образ/i.test(text))) {
         try { const o = await Api.post('/api/outfits', { count: 1 }); if (o.outfits && o.outfits[0]) patch.outfit = o.outfits[0]; } catch (e) { /* без образа */ }
       }
       if (!finish(patch)) return;
-      enrichLive(mid, text, d, extP, () => relayQid);
+      if (!noLive) enrichLive(mid, text, d, extP, () => relayQid);
     } catch (e) {
       /* нет backend (статический хостинг): локальный демо-мозг */
       try {

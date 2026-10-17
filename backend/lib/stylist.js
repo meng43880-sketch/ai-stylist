@@ -14,11 +14,13 @@ const store = require('./store');
 const O = require('./orchestrator');
 const P = require('./persona');
 
+let F = null; try { F = require('./features'); } catch (e) { F = null; } // умные функции: память, кеш, квоты, гардероб
 const origChat = O.chat;
 
 async function callJSON(provider, system, user, opts) {
   const messages = [{ role: 'system', content: system }, { role: 'user', content: [{ type: 'text', text: user }] }];
   const msg = await Q.chatComplete(provider, { messages, tag: opts.tag, maxTokens: opts.maxTokens, temperature: opts.temperature });
+  if (F && opts.U) F.account(opts.U, system.length + user.length, (msg.content || '').length); // учёт токенов на пользователя
   return P.extractJSON(msg.content || '');
 }
 const lc = (arr, map) => arr.map((k) => String(map[k] || k).toLowerCase());
@@ -85,15 +87,31 @@ async function chatV2(args, msg) {
   const brief = { gender: profile.gender, height: profile.height, build: profile.build, budget: profile.budget, sizes: [profile.topSize, profile.pantsSize, profile.shoeSize].join('/'), styles: profile.styles, colors: profile.colors };
 
   /* А. Понять запрос */
+  const memory = F ? F.memoryFor(UU, cid) : '';
   let und;
   try {
-    const raw = await callJSON(CFG.qwen.stylist, P.UNDERSTAND_SYSTEM,
-      JSON.stringify({ message: msg, profile: brief, slots, history: hist.slice(-6), taste: tasteLine(UU.taste, profile) }),
-      { tag: 'stylist', maxTokens: 260, temperature: 0.1 });
+    const upayload = JSON.stringify({ message: msg, profile: brief, slots, history: hist.slice(-6), memory, taste: tasteLine(UU.taste, profile) });
+    /* Одинаковый вопрос при одинаковом контексте не гоняем в модель второй раз (кеш на 6 часов). */
+    const ukey = 'u' + require('crypto').createHash('sha1').update(upayload).digest('hex').slice(0, 20);
+    let raw = null;
+    if (F) { const hit = store.getCache('f_und', ukey, 6 * 3600e3); if (hit) { raw = hit; F.account(UU, 0, 0, true); } }
+    if (!raw) {
+      raw = await callJSON(CFG.qwen.stylist, P.UNDERSTAND_SYSTEM, upayload, { tag: 'stylist', maxTokens: 260, temperature: 0.1, U: UU });
+      if (F && raw && typeof raw === 'object') store.setCache('f_und', ukey, raw);
+    }
     und = P.normUnderstand(raw);
   } catch (e) {
     if (e.code === 'AUTH' || e.code === 'NO_FUNDS') throw e;
     und = P.normUnderstand({});
+  }
+  /* Режим «из моего гардероба»: никаких покупок, образ собирает код из вещей пользователя. */
+  if (F && /из (моего |своего |имеющ|того,? что есть)|без покупок|что у меня есть|из гардероба|из своих вещ/i.test(msg)) {
+    const wo = F.wardrobeOutfit(UU, profile, temp, { count: 3 });
+    const outfit = wo.outfits && wo.outfits[0];
+    UU.session = UU.session || {}; UU.session[cid] = Object.assign({}, slots, { lastQuery: msg });
+    chats[cid] = prev.concat([{ role: 'user', text: msg, t: Date.now() }, { role: 'ai', text: wo.message, t: Date.now() }]).slice(-30);
+    UU.chats = chats; F.afterChat(UU, cid, chats[cid], UU.session[cid]); store.save();
+    return { intent: 'wardrobe_outfit', message: wo.message, picks: [], question: '', quick: wo.ok ? ['Другой вариант из гардероба', 'Что докупить к этим вещам'] : ['Открыть гардероб'], products: [], total: 0, outfit: outfit || null, outfits: wo.outfits || [], missing: wo.missing || [], conversationId: cid, aiMode: 'production', model: CFG.qwen.stylist.model };
   }
   const intent = mergeIntent(baseIntent, und);
   const { refine } = applyRefine(intent, msg, slots, profile);
@@ -115,13 +133,13 @@ async function chatV2(args, msg) {
   if (items.length || und.intent === 'chitchat' || und.intent === 'advice') {
     const payload = JSON.stringify({
       request: msg, understood: { category: crit.category, maxPrice: crit.maxPrice, occasion: crit.occasion, colors: intent.soft.colors },
-      weatherTemp: temp, profile: brief, taste: tasteLine(UU.taste, profile), history: hist.slice(-4), missing: und.missing,
+      weatherTemp: temp, profile: brief, taste: tasteLine(UU.taste, profile), history: hist.slice(-4), memory, missing: und.missing,
       wardrobe: wr.slice(0, 6).map((w) => w.title),
       items: items.slice(0, 5).map((p) => ({ id: p.id, title: String(p.title).slice(0, 60), price: p.price, why: p.why || [], warn: p.warn || [] }))
     });
     for (let i = 0; i < 2 && !say; i++) {
       try {
-        const raw = await callJSON(CFG.qwen.stylist, P.SAY_SYSTEM, payload, { tag: 'stylist', maxTokens: 300, temperature: i ? 0.2 : 0.5 });
+        const raw = await callJSON(CFG.qwen.stylist, P.SAY_SYSTEM, payload, { tag: 'stylist', maxTokens: 300, temperature: i ? 0.2 : 0.5, U: UU });
         say = P.validateSay(raw, allowed);
       } catch (e) {
         if (e.code === 'AUTH' || e.code === 'NO_FUNDS') throw e;
@@ -154,6 +172,7 @@ async function chatV2(args, msg) {
   });
   chats[cid] = prev.concat([{ role: 'user', text: msg, t: Date.now() }, { role: 'ai', text: say.message, t: Date.now() }]).slice(-30);
   UU.chats = chats;
+  if (F) F.afterChat(UU, cid, chats[cid], UU.session[cid]); // резюме диалога раз в ~10 сообщений, фоном
   store.logHistory('ai', `stylist2 ${Q.getLastModel('stylist') || CFG.qwen.stylist.model} ${Date.now() - t0}ms ${und.intent}`);
   store.save();
   return {
@@ -193,7 +212,8 @@ function outfitsFor(items, profile, U, count) {
   const w = store.getCache('weather', 'cur', 3600 * 1000);
   const temp = w && typeof w.temp === 'number' ? w.temp : null;
   const budget = (Number(profile.budget) || 5000) * 2.5; // бюджет в профиле — за вещь; на образ берём ×2.5
-  return R.buildOutfits(items, profile, count || 3, { wardrobe: (U && U.wardrobe) || [], temp, budget });
+  const list = R.buildOutfits(items, profile, count || 3, { wardrobe: (U && U.wardrobe) || [], temp, budget });
+  return F ? F.avoidWorn(list, U, 10) : list; // не повторяем образы, которые уже надевал
 }
 
 /* Подключаем: server.js зовёт O.chat / O.reviewComment в момент запроса, поэтому подмена работает. */

@@ -16,10 +16,11 @@ const A = require('./lib/auth');
 const T = require('./lib/taste');
 const CX = require('./lib/context');
 const EV = require('./lib/events');
+const FEAT = require('./lib/features'); // умные функции: капсула, календарь, цены, квоты, PWA
 const STY = require('./lib/stylist'); // AI-стилист v2: подменяет O.chat и O.reviewComment
 
 const ROOT = path.join(__dirname, '..');
-const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.json': 'application/json; charset=utf-8' };
+const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.json': 'application/json; charset=utf-8', '.webmanifest': 'application/manifest+json', '.png': 'image/png' };
 /* rate limiting: 60 req/min с IP; auth — строже (10/мин против перебора) */
 const hits = new Map();
 const authHits = new Map();
@@ -94,12 +95,15 @@ const PUBLIC_API = ['/api/status', '/api/diag', '/api/diag-report', '/api/contex
 async function route(req, res) {
   const url = new URL(req.url, 'http://x');
   const p = url.pathname; const m = req.method;
-  const ip = req.socket.remoteAddress || '?';
+  const ip = ((req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress) || '?';
   if (!rateOk(ip)) return send(res, 429, { ok: false, error: 'Слишком много запросов. Подожди минуту.' });
   console.log(new Date().toISOString(), m, p);
 
   /* --- static frontend --- */
-  if (m === 'GET' && (p === '/' || p === '/index.html' || p === '/styles.css' || p === '/app.js' || p === '/demo.js' || p === '/chat.js' || p === '/ui.css')) {
+  if (m === 'GET' && (p === '/' || p === '/index.html' || p === '/styles.css' || p === '/app.js' || p === '/demo.js' || p === '/chat.js' || p === '/ui.css'
+    /* умные функции: PWA-оболочка, тема, адаптив — свои хуки FEAT.handlePublic стоят уже ПОСЛЕ 404 для не-/api, поэтому перечисляем здесь */ 
+    || p === '/features.js' || p === '/features.css' || p === '/theme.css' || p === '/responsive.css' || p === '/pwa-sw.js' || p === '/manifest.webmanifest'
+    || p === '/icon-192.png' || p === '/icon-512.png' || p === '/icon-maskable-512.png' || p === '/apple-touch-icon.png')) {
     const f = p === '/' ? '/index.html' : p;
     const fp = path.join(ROOT, f);
     if (!fp.startsWith(ROOT)) return send(res, 403, { ok: false });
@@ -137,9 +141,11 @@ async function route(req, res) {
       const w = await O.getWeather();
       return send(res, 200, { ok: true, season: R.currentSeason(), weather: w });
     }
-    const isPublic = p.startsWith('/api/auth/') || PUBLIC_API.includes(p) || p === '/api/status' || p === '/api/context';
+    if (FEAT.handlePublic(req, res)) return;
+  const isPublic = p.startsWith('/api/auth/') || PUBLIC_API.includes(p) || p === '/api/status' || p === '/api/context';
     const uid = isPublic ? null : authUid(req);
     const U = uid ? UD(uid) : null;
+  if (FEAT.handle(req, res, uid, U)) return;
     /* --- profile --- */
     if (m === 'GET' && p === '/api/profile') return send(res, 200, { ok: true, profile: profile(U), vision: U.vision || null, measures: U.measures || null });
     /* Frontend исторически шлёт POST — принимаем оба метода, контракт не рвём. */
