@@ -675,25 +675,36 @@ window.addEventListener('message', (e) => {
     pollReviewComment(e.data.productId);
   }
 });
+/* Активный пинг моста: страница сама спрашивает «расширение тут?», а не ждёт
+   единственный hello (его легко пропустить, если скрипт страницы стартовал
+   позже инъекции, а страница из кеша — раньше). Ответ приходит тем же hello. */
+function pingExt() { try { window.postMessage({ src: 'sainvio-web', want: 'ping' }, '*'); } catch (e) {} }
+try {
+  setTimeout(pingExt, 800); setTimeout(pingExt, 3000);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') pingExt(); });
+} catch (e) {}
 function extLiveQuery(query) {
-  if (!window.__extBridge) {
-    if (!window.__extHintShown) {
-      window.__extHintShown = true;
-      try { toast('Живьё: обнови расширение и страницу'); } catch (e) {}
-    }
-    return Promise.resolve([]);
-  }
+  /* Не ворот: мост мог не успеть поздороваться — всё равно шлём запрос.
+     Живой мост ответит; тихий таймаут покажет подсказку. */
+  pingExt();
   return new Promise((resolve) => {
     const reqId = 'q' + Date.now().toString(36);
     let to = null, done = false;
     const over = (v) => { if (!done) { done = true; if (to) clearTimeout(to); window.removeEventListener('message', h); resolve(v); } };
     function h(e) {
       if (!e || e.source !== window || !e.data || e.data.src !== 'sainvio-ext' || e.data.reqId !== reqId) return;
+      window.__extBridge = true;
       const items = e.data.busy ? [] : (e.data.items || []);
       if (items.length) { try { toast('Расширение: свежих ' + items.length); } catch (te) {} }
       over(items);
     }
-    to = setTimeout(() => over([]), 50000);
+    to = setTimeout(() => {
+      over([]);
+      if (!window.__extBridge && !window.__extHintShown) {
+        window.__extHintShown = true;
+        try { toast('Живьё: расширение не отвечает — обнови страницу и расширение'); } catch (te) {}
+      }
+    }, 50000);
     window.addEventListener('message', h);
     try { window.postMessage({ src: 'sainvio-web', want: 'liveQuery', query: String(query || '').slice(0, 60), reqId }, '*'); }
     catch (e) { over([]); }

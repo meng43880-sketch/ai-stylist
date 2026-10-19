@@ -1,19 +1,28 @@
 'use strict';
 /* bridge.js — работает НА СТРАНИЦЕ sainvio (не WB!). Слушает window.postMessage
-   от приложения {src:'sainvio-web', want:'liveQuery', query, reqId},
-   пересылает в service worker (у него доступ к вкладке WB) и возвращает
-   ответ обратно странице {src:'sainvio-ext', reqId, items|busy}. */
-/* Маяк для страницы: «мост на месте». Страница показывает подсказку,
-   только если маяка нет (а не ждёт 35с в пустоту).
+   от приложения {src:'sainvio-web', want:...} и передаёт в service worker
+   (у него доступ к вкладке WB). Маяк «мост на месте» отдаём либо по своей
+   инициативе (hello), либо по запросу страницы (want:'ping').
    Заодно отдаём backend из настроек: страница сверяет его со своим
    адресом — пуш в один сервер, а читает другой, это ровно «Пока тихо». */
-try {
-  chrome.storage.local.get(['backend'], (cfg) => {
-    try { window.postMessage({ src: 'sainvio-ext', hello: true, backend: String((cfg && cfg.backend) || '') }, '*'); } catch (e) {}
-  });
-} catch (e) {
-  try { window.postMessage({ src: 'sainvio-ext', hello: true }, '*'); } catch (e2) {}
+function beacon() {
+  try {
+    chrome.storage.local.get(['backend'], (cfg) => {
+      let backend = '';
+      try { backend = String((cfg && cfg.backend) || ''); } catch (e) {}
+      try { window.postMessage({ src: 'sainvio-ext', hello: true, backend }, '*'); } catch (e) {}
+    });
+  } catch (e) {
+    /* Контекст расширения недействителен (расширение перезагружено, а вкладка
+       старая). Молчим намеренно: страница честно попросит обновить вкладку,
+       а не будет думать, что мост жив. */
+  }
 }
+beacon();
+try {
+  window.addEventListener('pageshow', beacon);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') beacon(); });
+} catch (e) {}
 /* Обратный канал: расширение толкает страницу (отзывы готовы). */
 try {
   chrome.runtime.onMessage.addListener((msg) => {
@@ -24,6 +33,7 @@ try {
 } catch (e) {}
 window.addEventListener('message', (e) => {
   if (e.source !== window || !e.data || e.data.src !== 'sainvio-web') return;
+  if (e.data.want === 'ping') { beacon(); return; }
   if (e.data.want === 'openProduct' || e.data.want === 'closeProduct') {
     try { chrome.runtime.sendMessage({ type: e.data.want, nmId: String(e.data.nmId || ''), pid: String(e.data.pid || '') }); } catch (err) {}
     return;

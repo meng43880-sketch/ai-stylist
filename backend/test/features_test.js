@@ -196,5 +196,8 @@ const prof = { budget: 5000, topSize: 'M', pantsSize: '32', shoeSize: '43' };
   const D = user(); D.ext = { watch: { a: 1 } }; res = mkRes(); F.handle(mkReq('DELETE', '/api/profile'), res, 'u1', D); ok(D.ext === undefined, 'X9 «Удалить мои данные» стирает U.ext');
   res = mkRes(); ok(F.handle(mkReq('GET', '/api/profile'), res, 'u1', user()) === false, 'X10 чужие маршруты не трогаем');
   ok(F.handle(mkReq('GET', '/api/features/hints'), mkRes(), null, null) === false, 'X11 без пользователя хук молчит');
+  /* Порог тревоги «расширение отвалилось» обязан быть с запасом над циклом
+     сбора (6ч): иначе ложный stale каждые 6 часов на живом расширении. */
+  ok(F.health().extension.staleAfterMin >= 720, 'X12 порог stale с запасом над 6-часовым циклом сбора', String(F.health().extension.staleAfterMin));
   console.log('\n' + pass + ' passed, ' + fail + ' failed'); process.exit(fail ? 1 : 0);
 })();
