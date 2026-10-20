@@ -29,7 +29,9 @@ function extractJSON(text) {
 }
 /* Цепочка: primary → free (dots, nemo, быстрые таймауты) → платная.
    Мёртвых моделей нет, долбёжки нет: макс. 5 попыток, дальше — честная ошибка. */
-const FREE_TIMEOUT = 12000, PAID_TIMEOUT = 25000, MAX_ATTEMPTS = 5;
+/* PRIMARY_TIMEOUT держим на уровне free: зависшую primary-модель бросаем быстро,
+   иначе каждый ответ чата стоит +20с (пользователь упирается в клиентский лимит). */
+const PRIMARY_TIMEOUT = 12000, FREE_TIMEOUT = 12000, PAID_TIMEOUT = 25000, MAX_ATTEMPTS = 5;
 async function chatComplete(provider, { messages, tools, temperature, timeoutMs, tag, maxTokens }) {
   const payload = (withFormat, model) => Object.assign({
     model: model || provider.model, messages,
@@ -37,7 +39,7 @@ async function chatComplete(provider, { messages, tools, temperature, timeoutMs,
     response_format: (tools || !withFormat) ? undefined : { type: 'json_object' },
     tools: tools || undefined
   }, maxTokens ? { max_tokens: maxTokens } : {});
-  const queue = [{ m: provider.model, paid: false, to: timeoutMs || 20000 }];
+  const queue = [{ m: provider.model, paid: false, to: timeoutMs || PRIMARY_TIMEOUT }];
   (provider.free || []).forEach((f) => queue.push({ m: f, paid: false, to: FREE_TIMEOUT }));
   if (provider.paid) queue.push({ m: provider.paid, paid: true, to: PAID_TIMEOUT });
   const tried = new Set();
