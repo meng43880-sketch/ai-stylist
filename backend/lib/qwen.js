@@ -40,8 +40,13 @@ async function chatComplete(provider, { messages, tools, temperature, timeoutMs,
     tools: tools || undefined
   }, maxTokens ? { max_tokens: maxTokens } : {});
   const queue = [{ m: provider.model, paid: false, to: timeoutMs || PRIMARY_TIMEOUT }];
-  (provider.free || []).forEach((f) => queue.push({ m: f, paid: false, to: FREE_TIMEOUT }));
-  if (provider.paid) queue.push({ m: provider.paid, paid: true, to: PAID_TIMEOUT });
+  /* Если primary сам free-модель: при 429/таймауте не тратим ещё 12с на другие
+     медленные free, а сразу идём в быструю платную. Иначе каждый ответ чата
+     стоит +12с, и пользователь упирается в клиентский лимит. */
+  const isFreePrimary = /:free$/i.test(String(provider.model || ''));
+  if (isFreePrimary && provider.paid) queue.push({ m: provider.paid, paid: true, to: PAID_TIMEOUT });
+  (provider.free || []).forEach((f) => { if (f !== provider.model) queue.push({ m: f, paid: false, to: FREE_TIMEOUT }); });
+  if (provider.paid && !isFreePrimary) queue.push({ m: provider.paid, paid: true, to: PAID_TIMEOUT });
   const tried = new Set();
   let res = null, used = '', last429 = false, lastErr = null, paidTried = false;
   let attempts = 0;
