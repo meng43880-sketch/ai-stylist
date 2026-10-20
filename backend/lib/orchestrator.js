@@ -332,17 +332,21 @@ async function searchPipeline({ struct, text, profile, feedback, limit, wardrobe
     }
   } catch (e) { /* мост недоступен — идём дальше без него */ }
   // hybrid/live: веер запросов × страницы (до ~150 кандидатов с WB) →
-  // скоринг всех → топ-50. Долгий WB режем по общему таймауту 12с и молча
+  // скоринг всех → топ-50. Долгий WB режем по общему таймауту и молча
   // откатываемся на остальное — чат не должен висеть.
   // ВРЕМЕННО ВЫКЛЮЧЕНО флагом WB_FUNNEL=off (код цел, воронка не ходит вообще).
-  if (CFG.dataSource === 'hybrid' && process.env.WB_FUNNEL !== 'off') {
+  /* Свежий homefeed от расширения (сбор раз в 6ч) уже даёт полный пул —
+     не ждём WB-воронку, иначе каждый чат платит +12с впустую. */
+  let hfFresh = false;
+  try { const HF = require('./homefeed'); hfFresh = !!(HF.stats && HF.stats().fresh); } catch (e) { /* нет моста — идём в воронку */ }
+  if (CFG.dataSource === 'hybrid' && process.env.WB_FUNNEL !== 'off' && !(hfFresh && cands.length >= 8)) {
     try {
       const gdr = (profile && (profile.gender === 'male' || profile.gender === 'female')) ? profile.gender : '';
       const base = (text && text.trim()) ? [M.withGender(text.trim(), gdr)] : [];
       const vars = M.structToQueries(Object.assign({}, struct || {}, { gender: gdr }));
       const queries = base.concat(vars.filter((qq) => !base.includes(qq))).slice(0, 3);
       const wait = (ms) => new Promise((res) => setTimeout(() => res([]), ms));
-      const live = await Promise.race([M.funnelSearch(queries, 25, 2), wait(12000)]);
+      const live = await Promise.race([M.funnelSearch(queries, 25, 2), wait(4000)]);
       if (live.length) {
         const ctx = scoreCtx(profile, feedback, { occasion: struct && struct.occasion, wardrobe: wardrobe || [], taste: taste || null, favorites: favorites || [] });
         const scored = M.scoreLive(live.slice(0, 150), ctx);
