@@ -39,12 +39,13 @@ async function chatComplete(provider, { messages, tools, temperature, timeoutMs,
     response_format: (tools || !withFormat) ? undefined : { type: 'json_object' },
     tools: tools || undefined
   }, maxTokens ? { max_tokens: maxTokens } : {});
-  const queue = [{ m: provider.model, paid: false, to: timeoutMs || PRIMARY_TIMEOUT }];
-  /* Если primary сам free-модель: при 429/таймауте не тратим ещё 12с на другие
-     медленные free, а сразу идём в быструю платную. Иначе каждый ответ чата
-     стоит +12с, и пользователь упирается в клиентский лимит. */
+  /* Если primary — free-модель, быстрый платный шлюз пробуем ПЕРВЫМ: free то
+     отдают 429, то отвечают 10-20с, и каждый чат упирался в клиентский лимит.
+     Free остаются фолбэком: если платная недоступна (402/5xx) — идём в них. */
   const isFreePrimary = /:free$/i.test(String(provider.model || ''));
+  const queue = [];
   if (isFreePrimary && provider.paid) queue.push({ m: provider.paid, paid: true, to: PAID_TIMEOUT });
+  queue.push({ m: provider.model, paid: false, to: timeoutMs || PRIMARY_TIMEOUT });
   (provider.free || []).forEach((f) => { if (f !== provider.model) queue.push({ m: f, paid: false, to: FREE_TIMEOUT }); });
   if (provider.paid && !isFreePrimary) queue.push({ m: provider.paid, paid: true, to: PAID_TIMEOUT });
   const tried = new Set();
@@ -77,6 +78,17 @@ async function chatComplete(provider, { messages, tools, temperature, timeoutMs,
           const alts = body && ((body.metadata && body.metadata.alternatives) || (body.error && body.error.metadata && body.error.metadata.alternatives)) || [];
           alts.forEach((a) => { if (a && !tried.has(a) && queue.length < 8) queue.push({ m: a, paid: false, to: FREE_TIMEOUT }); });
         } catch (e) { /* без альтернатив — дальше по списку */ }
+        res = null;
+        clearTimeout(t);
+        continue;
+      }
+      if (res.status === 401 || res.status === 403) { used = q.m; clearTimeout(t); break; }
+      /* Не-ok (402/5xx) не обрывает цепочку: платная могла быть недоступна —
+         пробуем следующий кандидат (free), иначе деградация была бы фатальной. */
+      if (!res.ok) {
+        lastErr = res.status === 402
+          ? err('NO_FUNDS', 'Нулевой баланс на шлюзе. Пополни счёт — запрос стоит доли рубля.')
+          : err('PROVIDER', `Ошибка AI-провайдера (${q.m}): HTTP ` + res.status, 502);
         res = null;
         clearTimeout(t);
         continue;

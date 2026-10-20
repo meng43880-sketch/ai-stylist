@@ -111,7 +111,7 @@ async function chatV2(args, msg) {
     UU.session = UU.session || {}; UU.session[cid] = Object.assign({}, slots, { lastQuery: msg });
     chats[cid] = prev.concat([{ role: 'user', text: msg, t: Date.now() }, { role: 'ai', text: wo.message, t: Date.now() }]).slice(-30);
     UU.chats = chats; F.afterChat(UU, cid, chats[cid], UU.session[cid]); store.save();
-    return { intent: 'wardrobe_outfit', message: wo.message, picks: [], question: '', quick: wo.ok ? ['Другой вариант из гардероба', 'Что докупить к этим вещам'] : ['Открыть гардероб'], products: [], total: 0, outfit: outfit || null, outfits: wo.outfits || [], missing: wo.missing || [], conversationId: cid, aiMode: 'production', model: CFG.qwen.stylist.model };
+    return { intent: 'wardrobe_outfit', message: wo.message, picks: [], question: '', quick: wo.ok ? ['Другой вариант из гардероба', 'Что докупить к этим вещам'] : ['Открыть гардероб'], products: [], total: 0, outfit: outfit || null, outfits: wo.outfits || [], missing: wo.missing || [], conversationId: cid, aiMode: 'production', model: (Q.getLastModel('stylist') || CFG.qwen.stylist.model) };
   }
   const intent = mergeIntent(baseIntent, und);
   const { refine } = applyRefine(intent, msg, slots, profile);
@@ -178,7 +178,7 @@ async function chatV2(args, msg) {
   return {
     intent: und.intent, searchCriteria: crit, searchIntent: intent, relaxed,
     message: say.message, picks: say.picks, question: say.question, quick: say.quick,
-    suggestQuery: text, products: items, total, conversationId: cid, aiMode: 'production', model: CFG.qwen.stylist.model
+    suggestQuery: text, products: items, total, conversationId: cid, aiMode: 'production', model: (Q.getLastModel('stylist') || CFG.qwen.stylist.model)
   };
 }
 async function chat(args) {
